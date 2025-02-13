@@ -25,20 +25,23 @@ class RangedEnemy extends Enemy {
 
         const distance = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
 
+        // Flip the enemy to face the player
+        this.flipX = player.x < this.x;
+
         // Keep distance from player
         if (distance < this.attackRange / 2) {
-            // Move away from player
             const angle = Phaser.Math.Angle.Between(player.x, player.y, this.x, this.y);
             this.setVelocity(
                 Math.cos(angle) * this.speed,
                 Math.sin(angle) * this.speed
             );
+            this.play('enemy_walk', true);
         } else if (distance > this.attackRange) {
-            // Move towards player
             this.scene.physics.moveToObject(this, player, this.speed);
+            this.play('enemy_walk', true);
         } else {
-            // In ideal range - stop and shoot
             this.setVelocity(0, 0);
+            this.play('ranged_idle', true);
         }
 
         // Update gun and shoot when in range

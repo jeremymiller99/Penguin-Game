@@ -8,6 +8,7 @@ class Bullet extends Phaser.Physics.Arcade.Sprite {
         scene.physics.world.enable(this);
         this.body.setAllowGravity(false);
         this.body.setCollideWorldBounds(false);
+        this.setScale(2.5);
     }
 
     fire(x, y, angle) {

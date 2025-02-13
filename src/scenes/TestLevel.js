@@ -84,7 +84,7 @@ class TestLevel extends Phaser.Scene {
 
         // Randomly spawn 3-6 enemies of random types at random positions
         const numEnemies = Phaser.Math.Between(3, 6);
-        const enemyTypes = ['ranged', 'ranged', 'ranged'];
+        const enemyTypes = ['ranged', 'melee', 'default'];
         
         for (let i = 0; i < numEnemies; i++) {
             const randomType = enemyTypes[Phaser.Math.Between(0, enemyTypes.length - 1)];

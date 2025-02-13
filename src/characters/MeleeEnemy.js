@@ -3,14 +3,17 @@ class MeleeEnemy extends Enemy {
         // Configure melee enemy specific properties
         const config = {
             sprite: 'enemySprite',
-            maxHealth: 150,
-            speed: 150,
+            maxHealth: 200,
+            speed: 50,
             attackRange: 50,
             attackCooldown: 1000,
-            attackDamage: 25
+            attackDamage: 35
         };
         
         super(scene, x, y, config);
+
+        // Make the enemy bigger
+        this.setScale(3);
     }
 
     update(player, time) {
