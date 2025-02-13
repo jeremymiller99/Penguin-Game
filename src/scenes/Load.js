@@ -28,6 +28,14 @@ class Load extends Phaser.Scene {
         this.load.on('loaderror', (fileObj) => {
             console.error('Error loading:', fileObj.src);
         });
+
+        // Add sound effect loading
+        this.load.audio('cashPickup', './assets/sfx/pickupCash.wav');
+        this.load.audio('explosion', './assets/sfx/explosion.wav');
+        this.load.audio('tone', './assets/sfx/tone.wav');
+        this.load.audio('hit', './assets/sfx/hitHurt.wav');
+        this.load.audio('ak47shot', './assets/sfx/ak47shot.wav');
+
     }
 
     create() {

@@ -96,9 +96,6 @@ class TestLevel extends Phaser.Scene {
         // Add collision between bullets and enemies
         this.physics.add.collider(this.ak47.bullets, this.enemies, this.handleBulletEnemyCollision, null, this);
 
-        // Debug: Log all guns in the scene
-        const gunsInScene = this.children.list.filter(child => child instanceof Gun);
-
         // Add overlap detection for guns with debug logging
         this.physics.add.overlap(
             this.penguin,
@@ -130,17 +127,10 @@ class TestLevel extends Phaser.Scene {
             this
         );
 
-        // Debug: Log initial penguin position
-        console.log('Penguin initial position:', {
-            x: this.penguin.x,
-            y: this.penguin.y,
-            hasPhysics: this.penguin.body !== undefined
-        });
-
         // Create health bars
         this.playerHealthBar = this.drawHealthBar(this.penguin, 10, 40);
 
-        // Add after line 84
+        // Add cash group
         this.cash = this.physics.add.group({
             classType: Cash,
             runChildUpdate: true
@@ -156,20 +146,43 @@ class TestLevel extends Phaser.Scene {
         this.physics.add.overlap(this.penguin, this.cash, (penguin, cash) => {
             this.playerCurrency += cash.value;
             this.currencyText.setText('Cash: ' + this.playerCurrency);
+            
+            // Play pickup sound
+            this.sound.play('cashPickup', { 
+                volume: 0.5,
+                rate: 1
+            });
+            
             cash.destroy();
         }, null, this);
 
         // Add this at the end of create()
         this.startCountdown();
-    }
 
-    shutdown() {
-        // Remove this since we're not using the shoot listener anymore
-        // this.input.off('pointerdown', this.shootListener);
+        // In create(), after spawning enemies
+        this.enemies.getChildren().forEach(enemy => {
+            if (enemy instanceof RangedEnemy && enemy.gun) {
+                this.physics.add.collider(enemy.gun.bullets, this.penguin, (penguin, bullet) => {
+                    bullet.destroy();
+                    penguin.health -= enemy.attackDamage;
+                    
+                    // Play hit sound
+                    this.sound.play('hit', {
+                        volume: 0.4,
+                        rate: 0.8 + Math.random() * 0.4
+                    });
+
+                    // Visual feedback
+                    this.penguin.setTint(0xff0000);
+                    this.time.delayedCall(100, () => {
+                        this.penguin.clearTint();
+                    });
+                });
+            }
+        });
     }
 
     update() {
-        // Skip update if game is frozen
         if (this.isGameFrozen) return;
 
         // Calculate the velocity based on input
@@ -313,6 +326,26 @@ class TestLevel extends Phaser.Scene {
             if (this.enemies.getChildren().length === 1) { // 1 because this enemy hasn't been removed yet
                 this.spawnLadder();
             }
+        }
+
+        // Add collision between enemy bullets and player
+        if (enemy instanceof RangedEnemy && enemy.gun) {
+            this.physics.add.collider(enemy.gun.bullets, this.penguin, (penguin, bullet) => {
+                bullet.destroy();
+                penguin.health -= enemy.attackDamage;
+                
+                // Play hit sound
+                this.sound.play('hit', {
+                    volume: 0.4,
+                    rate: 0.8 + Math.random() * 0.4
+                });
+
+                // Visual feedback
+                this.penguin.setTint(0xff0000);
+                this.time.delayedCall(100, () => {
+                    this.penguin.clearTint();
+                });
+            });
         }
     }
 

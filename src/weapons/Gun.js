@@ -28,7 +28,7 @@ class Gun extends Phaser.GameObjects.Container {
         this.bullets = scene.physics.add.group({
             classType: Bullet,
             runChildUpdate: true,
-            collideWorldBounds: true,
+            collideWorldBounds: false,
             allowGravity: false
         });
 
@@ -102,6 +102,12 @@ class Gun extends Phaser.GameObjects.Container {
 
     fire(time) {
         if (this.isReloading || (time - this.lastFired) < this.fireDelay || this.currentAmmo <= 0) return false;
+
+        // Play gunshot sound with slight variation
+        this.scene.sound.play('ak47shot', { 
+            volume: 0.3,  // Lower volume since it will play frequently
+            rate: 0.9 + Math.random() * 0.2  // Random pitch between 0.9 and 1.1
+        });
 
         // Calculate bullet spawn position
         const adjustedSpawnPointY = this.gunSprite.flipY ? -this.bulletSpawnPoint.y : this.bulletSpawnPoint.y;

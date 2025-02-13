@@ -64,6 +64,12 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     takeDamage(damage) {
         this.health -= damage;
         
+        // Play hit sound
+        this.scene.sound.play('hit', {
+            volume: 0.4,
+            rate: 0.8 + Math.random() * 0.4  // Random pitch between 0.8 and 1.2
+        });
+
         // Flash red when hit
         this.setTint(0xff0000);
         this.scene.time.delayedCall(100, () => {
@@ -82,6 +88,12 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
 
         // Store scene reference
         const scene = this.scene;
+
+        // Play explosion sound
+        scene.sound.play('explosion', {
+            volume: 0.4,
+            rate: 0.8 + Math.random() * 0.4  // Random pitch between 0.8 and 1.2
+        });
 
         // Create explosion effect
         const particleCount = 30;  // More particles
