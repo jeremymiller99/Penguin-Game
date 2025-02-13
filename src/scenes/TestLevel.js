@@ -219,7 +219,6 @@ class TestLevel extends Phaser.Scene {
     update() {
         if (this.isGameFrozen) return;
         
-
         // Calculate the velocity based on input
         const velocity = this.calculateVelocity();
         
@@ -245,6 +244,11 @@ class TestLevel extends Phaser.Scene {
         // Handle pickup and reload actions
         if (Phaser.Input.Keyboard.JustDown(this.keys.pickup)) this.handlePickup();
         if (Phaser.Input.Keyboard.JustDown(this.keys.reload) && this.ak47.player === this.penguin) this.ak47.reload();
+
+        // Auto-reload if ammo is zero
+        if (this.ak47.currentAmmo === 0 && this.ak47.player === this.penguin) {
+            this.ak47.reload();
+        }
 
         // Update the gun
         this.ak47.update(this.time.now);
@@ -357,11 +361,6 @@ class TestLevel extends Phaser.Scene {
             const cashCount = Phaser.Math.Between(1, 3);
             for (let i = 0; i < cashCount; i++) {
                 this.cash.add(new Cash(this, enemy.x, enemy.y));
-            }
-            
-            // Check if all enemies are dead
-            if (this.enemies.getChildren().length === 1) { // 1 because this enemy hasn't been removed yet
-                this.spawnLadder();
             }
         }
 
