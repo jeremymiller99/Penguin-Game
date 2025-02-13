@@ -110,37 +110,52 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         const particleCount = 30;  // More particles
         const colors = [0xff0000, 0xff6600, 0xffff00, 0xffffff]; // Added white for extra pop
         
-        // Create multiple particle rings
-        for (let ring = 0; ring < 4; ring++) {  // Added an extra ring
-            const delay = ring * 50;
-            const scale = 1.5 + (ring * 0.8);  // Bigger particles
+        // Create blood splatter effect
+        for (let ring = 0; ring < 3; ring++) { // Reduced ring count
+            const delay = ring * 35; // Slower sequence
+            const scale = 2 + (ring * 0.6); // Smaller scaling
             
             for (let i = 0; i < particleCount; i++) {
-                const angle = (i / particleCount) * Math.PI * 2;
-                const speed = 300 + (ring * 100);  // Faster particles
-                const distance = 10 + (ring * 15);
+                // Create random angles for splatter look
+                const angle = (i / particleCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
+                const speed = 200 + Math.random() * 300; // Lower speeds
+                const distance = 5 + Math.random() * 20;
                 
-                // Create particle using existing bullet sprite
+                // Create blood droplet particle
                 const particle = scene.add.sprite(
                     this.x + Math.cos(angle) * distance,
                     this.y + Math.sin(angle) * distance,
                     'bullet'
                 );
                 
-                particle.setTint(colors[ring]);
-                particle.setScale(scale);
-                particle.setAlpha(0.9);
+                // Set to red tint
+                particle.setTint(0xff0000);
+                particle.setScale(scale * (0.5 + Math.random()));
+                particle.setAlpha(0.7 + Math.random() * 0.2);
+                
+                // Add rotation to particles
+                particle.rotation = Math.random() * Math.PI * 2;
                 
                 scene.time.delayedCall(delay, () => {
+                    // Initial "burst" tween
                     scene.tweens.add({
                         targets: particle,
-                        x: particle.x + Math.cos(angle) * speed,
-                        y: particle.y + Math.sin(angle) * speed,
-                        alpha: 0,
-                        scale: 0,
-                        duration: 800,  // Longer duration
-                        ease: 'Power2',
-                        onComplete: () => particle.destroy()
+                        scale: particle.scale * 1.2,
+                        duration: 100,
+                        onComplete: () => {
+                            // Main trajectory tween
+                            scene.tweens.add({
+                                targets: particle,
+                                x: particle.x + Math.cos(angle) * speed,
+                                y: particle.y + Math.sin(angle) * speed + 200, // Less gravity
+                                alpha: 0,
+                                scale: scale * 0.2,
+                                rotation: particle.rotation + (Math.random() * 3 - 1.5) * Math.PI,
+                                duration: 600 + Math.random() * 300,
+                                ease: 'Power3.easeOut',
+                                onComplete: () => particle.destroy()
+                            });
+                        }
                     });
                 });
             }
