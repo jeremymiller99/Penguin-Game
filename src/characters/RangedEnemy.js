@@ -12,7 +12,7 @@ class RangedEnemy extends Enemy {
         
         super(scene, x, y, config);
         
-        // Create AI-controlled gund
+        // Create AI-controlled gun
         this.gun = new Gun(scene, x, y, true);
         this.gun.assignToPlayer(this);
         
@@ -45,7 +45,7 @@ class RangedEnemy extends Enemy {
         if (this.gun) {
             this.gun.update(time);
             if (distance < this.attackRange && time - this.lastAttackTime > this.attackCooldown) {
-                this.gun.fire(time);
+                this.gun.fire(time); // No need to capture the return value
                 this.lastAttackTime = time;
             }
         }

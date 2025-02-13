@@ -84,7 +84,7 @@ class TestLevel extends Phaser.Scene {
 
         // Randomly spawn 3-6 enemies of random types at random positions
         const numEnemies = Phaser.Math.Between(3, 6);
-        const enemyTypes = ['ranged', 'melee', 'default'];
+        const enemyTypes = ['ranged', 'ranged', 'ranged'];
         
         for (let i = 0; i < numEnemies; i++) {
             const randomType = enemyTypes[Phaser.Math.Between(0, enemyTypes.length - 1)];
@@ -158,28 +158,6 @@ class TestLevel extends Phaser.Scene {
 
         // Add this at the end of create()
         this.startCountdown();
-
-        // In create(), after spawning enemies
-        this.enemies.getChildren().forEach(enemy => {
-            if (enemy instanceof RangedEnemy && enemy.gun) {
-                this.physics.add.collider(enemy.gun.bullets, this.penguin, (penguin, bullet) => {
-                    bullet.destroy();
-                    penguin.health -= enemy.attackDamage;
-                    
-                    // Play hit sound
-                    this.sound.play('hit', {
-                        volume: 0.4,
-                        rate: 0.8 + Math.random() * 0.4
-                    });
-
-                    // Visual feedback
-                    this.penguin.setTint(0xff0000);
-                    this.time.delayedCall(100, () => {
-                        this.penguin.clearTint();
-                    });
-                });
-            }
-        });
     }
 
     update() {
@@ -334,16 +312,16 @@ class TestLevel extends Phaser.Scene {
                 bullet.destroy();
                 penguin.health -= enemy.attackDamage;
                 
-                // Play hit sound
+                // Play sound effect
                 this.sound.play('hit', {
                     volume: 0.4,
                     rate: 0.8 + Math.random() * 0.4
                 });
 
-                // Visual feedback
-                this.penguin.setTint(0xff0000);
+                // Apply visual feedback
+                penguin.setTint(0xff0000);
                 this.time.delayedCall(100, () => {
-                    this.penguin.clearTint();
+                    penguin.clearTint();
                 });
             });
         }
@@ -399,6 +377,16 @@ class TestLevel extends Phaser.Scene {
             this.physics.add.collider(enemy.gun.bullets, this.penguin, (penguin, bullet) => {
                 bullet.destroy();
                 penguin.health -= enemy.attackDamage;
+                this.sound.play('hit', {
+                    volume: 0.4,
+                    rate: 0.8 + Math.random() * 0.4
+                });
+    
+                // Apply visual feedback
+                penguin.setTint(0xff0000);
+                this.time.delayedCall(100, () => {
+                    penguin.clearTint();
+                });
             });
         }
 

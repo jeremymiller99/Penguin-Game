@@ -116,17 +116,19 @@ class Gun extends Phaser.GameObjects.Container {
             y: this.bulletSpawnPoint.x * Math.sin(this.rotation) + adjustedSpawnPointY * Math.cos(this.rotation)
         };
         
-        const bullet = this.bullets.create(
+        const bullet = this.bullets.get(
             this.x + rotatedSpawnPoint.x,
-            this.y + rotatedSpawnPoint.y
+            this.y + rotatedSpawnPoint.y,
+            'bullet'
         );
-        bullet.setScale(3);
 
         if (bullet) {
+            bullet.setActive(true);
+            bullet.setVisible(true);
+            bullet.source = this.isAIControlled ? 'enemy' : 'player'; // Set the bullet source
             bullet.fire(this.x + rotatedSpawnPoint.x, this.y + rotatedSpawnPoint.y, this.rotation);
 
             // Show the muzzle flash briefly
-            // Create multiple muzzle flashes in a burst pattern
             for (let i = 0; i < 5; i++) {
                 const angle = this.rotation + (Math.random() - 0.5) * Math.PI / 4; // Random spread
                 const distance = 10 + Math.random() * 10; // Random distance from muzzle
@@ -135,7 +137,7 @@ class Gun extends Phaser.GameObjects.Container {
                     this.y + rotatedSpawnPoint.y + Math.sin(angle) * distance,
                     'muzzleFlash'
                 );
-                
+
                 flash.setRotation(Math.random() * Math.PI * 2);
                 flash.setAlpha(1);
                 flash.setScale(2 + Math.random() * 0.5);

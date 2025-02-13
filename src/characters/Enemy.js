@@ -56,6 +56,17 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
             console.log('Enemy attacks!');
             // Implement attack logic here (e.g., reduce player health)sdw
             player.health -= this.attackDamage; // Example: reduce player health by attackDamage
+            // Play sound effect
+            this.scene.sound.play('hit', {
+                volume: 0.4,
+                rate: 0.8 + Math.random() * 0.4
+            });
+
+            // Apply visual feedback
+            player.setTint(0xff0000);
+            this.scene.time.delayedCall(100, () => {
+                player.clearTint();
+            });
             this.lastAttackTime = time;
         }
     }

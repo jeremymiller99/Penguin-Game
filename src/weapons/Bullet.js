@@ -1,6 +1,7 @@
 class Bullet extends Phaser.Physics.Arcade.Sprite {
-    constructor(scene, x, y) {
+    constructor(scene, x, y, source) {
         super(scene, x, y, 'bullet');
+        this.source = source; // 'player' or 'enemy'
         this.speed = 1000; // Set bullet speed
         this.lifespan = 1000; // Set bullet lifespan
         
@@ -27,6 +28,18 @@ class Bullet extends Phaser.Physics.Arcade.Sprite {
         this.scene.time.delayedCall(this.lifespan, () => {
             if (this.active) this.destroy();
         });
+    }
+
+    handleCollision(target) {
+        if (this.source === 'enemy' && target === this.scene.penguin) {
+            target.health -= 10; // Example damage value
+            this.scene.sound.play('hit', { volume: 0.4 });
+            target.setTint(0xff0000);
+            this.scene.time.delayedCall(100, () => target.clearTint());
+        } else if (this.source === 'player' && target instanceof Enemy) {
+            target.takeDamage(10);
+        }
+        this.destroy();
     }
 
     preUpdate(time, delta) {

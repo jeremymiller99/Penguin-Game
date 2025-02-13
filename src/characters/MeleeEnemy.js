@@ -44,6 +44,16 @@ class MeleeEnemy extends Enemy {
         if (time - this.lastAttackTime > this.attackCooldown) {
             console.log('Melee enemy attacks!');
             player.health -= this.attackDamage;
+            this.scene.sound.play('hit', {
+                volume: 0.4,
+                rate: 0.8 + Math.random() * 0.4
+            });
+
+            // Apply visual feedback
+            player.setTint(0xff0000);
+            this.scene.time.delayedCall(100, () => {
+                player.clearTint();
+            });
             this.lastAttackTime = time;
 
             // Optional: Add melee attack animation or effect here
