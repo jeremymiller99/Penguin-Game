@@ -6,7 +6,7 @@ class Load extends Phaser.Scene {
     preload() {
         this.load.spritesheet('penguin', './assets/penguin.png', { frameWidth: 16, frameHeight: 16 });
         this.load.image('ak47', './assets/ak47.png');
-        this.load.image('crate', './assets/crate.png');
+        this.load.image('crate', './assets/oildrum.png');
         this.load.image('cash', './assets/cash.png');
         this.load.image('ladder', './assets/ladder.png');
         this.load.spritesheet('enemySprite', './assets/hazmat_guy.png', { frameWidth: 16, frameHeight: 16 });

@@ -3,7 +3,7 @@ class RangedEnemy extends Enemy {
         // Configure ranged enemy specific properties
         const config = {
             sprite: 'enemySprite',
-            maxHealth: 80,
+            maxHealth: 120,
             speed: 80,
             attackRange: 300,
             attackCooldown: 2000,

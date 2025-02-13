@@ -31,6 +31,10 @@ class TestLevel extends Phaser.Scene {
         this.penguin.health = 100; // Add max health
         this.penguin.maxHealth = 100;
 
+        // Enable physics on the penguin sprite and make it a dynamic body
+        this.physics.add.existing(this.penguin, false); // false = dynamic body
+        this.penguin.body.setCollideWorldBounds(true);
+
         // Define keyboard keys for player input
         this.keys = this.input.keyboard.addKeys({
             up: Phaser.Input.Keyboard.KeyCodes.W,
@@ -58,27 +62,79 @@ class TestLevel extends Phaser.Scene {
             fill: '#ffffff'
         });
 
-        // Create a physics-enabled crate
-        this.crate = this.physics.add.sprite(this.game.config.width / 2, this.game.config.height / 4, 'crate').setScale(4);
-        this.crate.setCollideWorldBounds(true);
-        this.crate.body.setAllowGravity(false);
-        this.crate.body.moves = true; // Allow the crate to be pushed
-        this.crate.body.setDrag(0.5); // Adjust drag for more responsiveness
-        this.crate.body.setBounce(0.2); // Increase bounce for more visible reaction
-        this.crate.body.setMass(1); // Lower the mass for easier movement
+        // Create a physics group to manage crates
+        this.crates = this.physics.add.group({
+            classType: Crate, // Ensure all objects in the group are instances of Crate
+            runChildUpdate: true
+        });
 
-        // Add collision between penguin and crate with a debug log
-        this.physics.add.collider(this.penguin, this.crate, () => {
+        // Spawn 1-3 random crates
+        const numCrates = Phaser.Math.Between(1, 3);
+        for (let i = 0; i < numCrates; i++) {
+            const randomX = Phaser.Math.Between(100, this.game.config.width - 100);
+            const randomY = Phaser.Math.Between(100, this.game.config.height - 100);
+            const crate = new Crate(this, randomX, randomY);
+            this.crates.add(crate);
+            crate.setCollideWorldBounds(true);
+        }
+
+        // Add collision between penguin and crates with a debug log
+        this.physics.add.collider(this.penguin, this.crates, () => {
             console.log('Penguin and crate are colliding!');
         });
 
-        // Enable physics on the penguin sprite and make it a dynamic body
-        this.physics.add.existing(this.penguin, false); // false = dynamic body
-        this.penguin.body.setCollideWorldBounds(true);
+        // Add collision between bullets and crates
+        this.physics.add.collider(this.ak47.bullets, this.crates, (bullet, crate) => {
+            bullet.destroy();
 
-        // Add collision between bullets and crate
-        this.physics.add.collider(this.ak47.bullets, this.crate, this.handleBulletImpact, null, this);
+            // Ensure the crate is an instance of Crate before calling explode()
+            if (crate instanceof Crate) {
+                // Get explosion position
+                const explosionX = crate.x;
+                const explosionY = crate.y;
+                const explosionRadius = 350; // Radius in pixels
 
+                // Check if penguin is within blast radius
+                const distToPenguin = Phaser.Math.Distance.Between(explosionX, explosionY, this.penguin.x, this.penguin.y);
+                if (distToPenguin < explosionRadius) {
+                    // Deal damage to penguin based on distance
+                    const damage = Math.floor(50 * (1 - distToPenguin/explosionRadius));
+                    if (this.penguin.health) {
+                        this.penguin.health -= damage;
+                    }
+                    
+                    this.penguin.setTint(0xff0000);
+                    this.time.delayedCall(100, () => {
+                        this.penguin.clearTint();
+                    });
+                }
+
+                // Check if any enemies are within blast radius
+                this.enemies.getChildren().forEach(enemy => {
+                    const distToEnemy = Phaser.Math.Distance.Between(explosionX, explosionY, enemy.x, enemy.y);
+                    if (distToEnemy < explosionRadius) {
+                        const damage = Math.floor(100 * (1 - distToEnemy/explosionRadius));
+                        if (enemy.health) {
+                            enemy.health -= damage;
+                            if (enemy.health <= 0) {
+                                enemy.die();
+                            }
+                        }
+
+                        enemy.setTint(0xff0000);
+                        this.time.delayedCall(100, () => {
+                            enemy.clearTint();
+                        });
+                    }
+                });
+
+                crate.explode();
+            } else {
+                console.error("Collision object is not a Crate instance:", crate);
+            }
+        });
+
+        
         // Create enemies group
         this.enemies = this.physics.add.group();
 
@@ -162,12 +218,15 @@ class TestLevel extends Phaser.Scene {
 
     update() {
         if (this.isGameFrozen) return;
+        
 
         // Calculate the velocity based on input
         const velocity = this.calculateVelocity();
         
         // Apply velocity to penguin's physics body
-        this.penguin.body.setVelocity(velocity.x, velocity.y);
+        if (this.penguin && this.penguin.body) {
+            this.penguin.body.setVelocity(velocity.x, velocity.y);
+        }
 
         // Play walking or idle animation based on movement
         const currentAnimation = this.penguin.anims.getName();
