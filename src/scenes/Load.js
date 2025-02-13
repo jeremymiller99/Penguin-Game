@@ -62,6 +62,6 @@ class Load extends Phaser.Scene {
             repeat: -1
         });
 
-        this.scene.start('TestLevel');
+        this.scene.start('Menu');
     }
 }

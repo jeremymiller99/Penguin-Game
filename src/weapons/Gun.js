@@ -10,7 +10,7 @@ class Gun extends Phaser.GameObjects.Container {
         // Initialize gun properties
         this.shotsPerSecond = 10;
         this.fireDelay = 1000 / this.shotsPerSecond;
-        this.damage = 30;
+        this.damage = 50;
         this.maxAmmo = 30;
         this.currentAmmo = this.maxAmmo;
         this.reloadTime = 1000;

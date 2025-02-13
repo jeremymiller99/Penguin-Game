@@ -15,7 +15,7 @@ let config = {
             gravity: { x: 0, y: 0 }
         }
     },
-    scene: [Load, TestLevel]
+    scene: [Load, Menu, Briefing, TestLevel]
 };
 
 let game = new Phaser.Game(config);

@@ -107,46 +107,7 @@ class TestLevel extends Phaser.Scene {
 
             // Ensure the crate is an instance of Crate before calling explode()
             if (crate instanceof Crate) {
-                // Get explosion position
-                const explosionX = crate.x;
-                const explosionY = crate.y;
-                const explosionRadius = 350; // Radius in pixels
-
-                // Check if penguin is within blast radius
-                const distToPenguin = Phaser.Math.Distance.Between(explosionX, explosionY, this.penguin.x, this.penguin.y);
-                if (distToPenguin < explosionRadius) {
-                    // Deal damage to penguin based on distance
-                    const damage = Math.floor(50 * (1 - distToPenguin/explosionRadius));
-                    if (this.penguin.health) {
-                        this.penguin.health -= damage;
-                    }
-                    
-                    this.penguin.setTint(0xff0000);
-                    this.time.delayedCall(100, () => {
-                        this.penguin.clearTint();
-                    });
-                }
-
-                // Check if any enemies are within blast radius
-                this.enemies.getChildren().forEach(enemy => {
-                    const distToEnemy = Phaser.Math.Distance.Between(explosionX, explosionY, enemy.x, enemy.y);
-                    if (distToEnemy < explosionRadius) {
-                        const damage = Math.floor(100 * (1 - distToEnemy/explosionRadius));
-                        if (enemy.health) {
-                            enemy.health -= damage;
-                            if (enemy.health <= 0) {
-                                enemy.die();
-                            }
-                        }
-
-                        enemy.setTint(0xff0000);
-                        this.time.delayedCall(100, () => {
-                            enemy.clearTint();
-                        });
-                    }
-                });
-
-                crate.explode();
+                this.handleCrateExplosion(crate);
             } else {
                 console.error("Collision object is not a Crate instance:", crate);
             }
@@ -158,7 +119,7 @@ class TestLevel extends Phaser.Scene {
                 this.physics.add.collider(enemy.gun.bullets, this.crates, (bullet, crate) => {
                     bullet.destroy();
                     if (crate instanceof Crate) {
-                        crate.explode();
+                        this.handleCrateExplosion(crate);
                     }
                 });
             }
@@ -807,5 +768,78 @@ class TestLevel extends Phaser.Scene {
             scale: 1,
             duration: 200
         });
+    }
+
+    // Add this new method to handle crate explosions
+    handleCrateExplosion(crate) {
+        if (!crate.active || !crate.scene) return; // Skip if crate is already destroyed
+
+        // Get explosion position
+        const explosionX = crate.x;
+        const explosionY = crate.y;
+        const explosionRadius = 350; // Radius in pixels
+
+        // Check if penguin is within blast radius
+        const distToPenguin = Phaser.Math.Distance.Between(explosionX, explosionY, this.penguin.x, this.penguin.y);
+        if (distToPenguin < explosionRadius) {
+            // Deal damage to penguin based on distance
+            const damage = Math.floor(50 * (1 - distToPenguin/explosionRadius));
+            if (this.penguin.health) {
+                this.penguin.health -= damage;
+            }
+            
+            this.penguin.setTint(0xff0000);
+            this.time.delayedCall(100, () => {
+                this.penguin.clearTint();
+            });
+        }
+
+        // Check if any enemies are within blast radius
+        this.enemies.getChildren().forEach(enemy => {
+            const distToEnemy = Phaser.Math.Distance.Between(explosionX, explosionY, enemy.x, enemy.y);
+            if (distToEnemy < explosionRadius) {
+                const damage = Math.floor(100 * (1 - distToEnemy/explosionRadius));
+                enemy.takeDamage(damage);
+            }
+        });
+
+        // Check for other crates in explosion radius
+        this.crates.getChildren().forEach(otherCrate => {
+            if (otherCrate !== crate && otherCrate instanceof Crate && otherCrate.active) {
+                const distToCrate = Phaser.Math.Distance.Between(explosionX, explosionY, otherCrate.x, otherCrate.y);
+                if (distToCrate < explosionRadius) {
+                    // Add a small delay to create a chain reaction effect
+                    this.time.delayedCall(100, () => {
+                        this.handleCrateExplosion(otherCrate);
+                    });
+                }
+            }
+        });
+
+        // Trigger the crate explosion effects
+        crate.explode();
+    }
+
+    spawnCrate() {
+        // Ensure crates spawn at least 200 pixels away from player
+        let validPosition = false;
+        let spawnX, spawnY;
+        
+        while (!validPosition) {
+            spawnX = Phaser.Math.Between(100, this.game.config.width - 100);
+            spawnY = Phaser.Math.Between(100, this.game.config.height - 100);
+            
+            const distanceFromPlayer = Phaser.Math.Distance.Between(
+                spawnX, spawnY, this.penguin.x, this.penguin.y
+            );
+            
+            if (distanceFromPlayer > 200) {
+                validPosition = true;
+            }
+        }
+        
+        const crate = new Crate(this, spawnX, spawnY);
+        this.crates.add(crate);
+        return crate;
     }
 }

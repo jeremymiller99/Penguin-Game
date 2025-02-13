@@ -14,10 +14,13 @@ class Crate extends Phaser.Physics.Arcade.Sprite {
     }
 
     explode() {
+        if (!this.active || !this.scene) return; // Prevent multiple explosions
+        
         console.log('Crate exploded!');
         this.setActive(false);
         this.setVisible(false);
 
+        // Store scene reference
         const scene = this.scene;
 
         // Play explosion sound
@@ -29,12 +32,14 @@ class Crate extends Phaser.Physics.Arcade.Sprite {
         // Create explosion effect
         const particleCount = 30;
         const colors = [0xff0000, 0xff6600, 0xffff00, 0xffffff];
+        let activeParticles = 0;
 
         for (let ring = 0; ring < 4; ring++) {
             const delay = ring * 50;
             const scale = 1.5 + (ring * 0.8);
 
             for (let i = 0; i < particleCount; i++) {
+                activeParticles++;
                 const angle = (i / particleCount) * Math.PI * 2;
                 const speed = 300 + (ring * 100);
                 const distance = 10 + (ring * 15);
@@ -58,13 +63,16 @@ class Crate extends Phaser.Physics.Arcade.Sprite {
                         scale: 0,
                         duration: 800,
                         ease: 'Power2',
-                        onComplete: () => particle.destroy()
+                        onComplete: () => {
+                            particle.destroy();
+                            activeParticles--;
+                            if (activeParticles === 0) {
+                                this.destroy();
+                            }
+                        }
                     });
                 });
             }
         }
-
-        // Destroy the crate
-        this.destroy();
     }
 }
