@@ -13,7 +13,7 @@ class Gun extends Phaser.GameObjects.Container {
         this.damage = 30;
         this.maxAmmo = 30;
         this.currentAmmo = this.maxAmmo;
-        this.reloadTime = 2000;
+        this.reloadTime = 1000;
         this.lastFired = 0;
         this.isReloading = false;
         this.isFiring = false;
@@ -168,6 +168,18 @@ class Gun extends Phaser.GameObjects.Container {
 
         console.log('Starting reload...');
         this.isReloading = true;
+
+        // Add spinning animation
+        this.scene.tweens.add({
+            targets: this.gunSprite,
+            rotation: Math.PI * 4, // Spin around twice
+            duration: this.reloadTime,
+            ease: 'Cubic.easeInOut',
+            onComplete: () => {
+                // Reset rotation at end
+                this.gunSprite.rotation = 0;
+            }
+        });
 
         this.scene.time.delayedCall(this.reloadTime, () => {
             this.currentAmmo = this.maxAmmo;

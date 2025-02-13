@@ -97,13 +97,13 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.setActive(false);
         this.setVisible(false);
 
-        // Store scene reference
+        // Store scene referencesa
         const scene = this.scene;
 
         // Play explosion sound
-        scene.sound.play('explosion', {
-            volume: 0.4,
-            rate: 0.8 + Math.random() * 0.4  // Random pitch between 0.8 and 1.2
+        scene.sound.play('death', {
+            volume: 1,
+            rate: 1 + Math.random() * 0.5  // Random pitch between 1.0 and 1.5
         });
 
         // Create explosion effect

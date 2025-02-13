@@ -35,6 +35,7 @@ class Load extends Phaser.Scene {
         this.load.audio('tone', './assets/sfx/tone.wav');
         this.load.audio('hit', './assets/sfx/hitHurt.wav');
         this.load.audio('ak47shot', './assets/sfx/ak47shot.wav');
+        this.load.audio('death', './assets/sfx/death.wav');
 
     }
 
