@@ -5,6 +5,9 @@ class TestLevel extends Phaser.Scene {
         this.cash = null;
         this.currencyText = null;
         this.isGameFrozen = false;
+        this.floorLevel = 1; // Initialize Floor Level
+        this.highScore = this.getHighScore(); // Load high score from storage
+        this.floorLevelText = null;
     }
 
     create() {
@@ -15,7 +18,7 @@ class TestLevel extends Phaser.Scene {
         const map = this.make.tilemap({ key: 'test_map' });
         console.log('Map created:', map);
 
-        // Add the tileset image to the mapdw
+        // Add the tileset image to the map
         const tileset = map.addTilesetImage('bg_tileset', 'bg_tileset');
         console.log('Tileset created:', tileset);
         
@@ -52,9 +55,19 @@ class TestLevel extends Phaser.Scene {
         this.ak47 = new Gun(this, this.game.config.width / 2 + 50, this.game.config.height / 2);
         this.ak47.assignToPlayer(this.penguin);
 
-        // Create a group for walls and add collision detection with bullets
-        this.walls = this.add.group();
-        this.physics.add.collider(this.ak47.bullets, this.walls, this.handleBulletImpact, null, this);
+        // Create enemies group
+        this.enemies = this.physics.add.group();
+
+        // Randomly spawn 3-6 enemies of random types at random positions
+        const numEnemies = Phaser.Math.Between(3, 6);
+        const enemyTypes = ['ranged', 'melee', 'default'];
+        
+        for (let i = 0; i < numEnemies; i++) {
+            const randomType = enemyTypes[Phaser.Math.Between(0, enemyTypes.length - 1)];
+            const randomX = Phaser.Math.Between(100, this.game.config.width - 100);
+            const randomY = Phaser.Math.Between(100, this.game.config.height - 100);
+            this.spawnEnemy(randomType, randomX, randomY);
+        }
 
         // Create a text object to display the ammo count
         this.ammoText = this.add.text(10, 10, 'Ammo: ' + this.ak47.currentAmmo, {
@@ -81,6 +94,11 @@ class TestLevel extends Phaser.Scene {
         // Add collision between penguin and crates with a debug log
         this.physics.add.collider(this.penguin, this.crates, () => {
             console.log('Penguin and crate are colliding!');
+        });
+
+        // Add collision between enemies and crates with a debug log
+        this.physics.add.collider(this.enemies, this.crates, () => {
+            console.log('Enemy and crate are colliding!');
         });
 
         // Add collision between bullets and crates
@@ -134,20 +152,17 @@ class TestLevel extends Phaser.Scene {
             }
         });
 
-        
-        // Create enemies group
-        this.enemies = this.physics.add.group();
-
-        // Randomly spawn 3-6 enemies of random types at random positions
-        const numEnemies = Phaser.Math.Between(3, 6);
-        const enemyTypes = ['ranged', 'melee', 'default'];
-        
-        for (let i = 0; i < numEnemies; i++) {
-            const randomType = enemyTypes[Phaser.Math.Between(0, enemyTypes.length - 1)];
-            const randomX = Phaser.Math.Between(100, this.game.config.width - 100);
-            const randomY = Phaser.Math.Between(100, this.game.config.height - 100);
-            this.spawnEnemy(randomType, randomX, randomY);
-        }
+        // Add collision between enemy bullets and crates
+        this.enemies.getChildren().forEach(enemy => {
+            if (enemy instanceof RangedEnemy && enemy.gun) {
+                this.physics.add.collider(enemy.gun.bullets, this.crates, (bullet, crate) => {
+                    bullet.destroy();
+                    if (crate instanceof Crate) {
+                        crate.explode();
+                    }
+                });
+            }
+        });
 
         // Add collision between bullets and enemies
         this.physics.add.collider(this.ak47.bullets, this.enemies, this.handleBulletEnemyCollision, null, this);
@@ -198,6 +213,18 @@ class TestLevel extends Phaser.Scene {
             fill: '#ffffff'
         });
 
+        // Create a text object to display the Floor Level
+        this.floorLevelText = this.add.text(10, 100, 'Floor Level: ' + this.floorLevel, {
+            fontSize: '20px',
+            fill: '#ffffff'
+        });
+
+        // Create a text object to display the Floor Level
+        this.floorLevelText = this.add.text(10, 100, 'Floor Level: ' + this.floorLevel, {
+            fontSize: '20px',
+            fill: '#ffffff'
+        });
+
         // Add collision between penguin and coins
         this.physics.add.overlap(this.penguin, this.cash, (penguin, cash) => {
             this.playerCurrency += cash.value;
@@ -219,6 +246,12 @@ class TestLevel extends Phaser.Scene {
     update() {
         if (this.isGameFrozen) return;
         
+        // Check if penguin is dead
+        if (this.penguin.health <= 0) {
+            this.checkPenguinDeath();
+            return;
+        }
+
         // Calculate the velocity based on input
         const velocity = this.calculateVelocity();
         
@@ -284,6 +317,217 @@ class TestLevel extends Phaser.Scene {
         return velocity;
     }
 
+    // Function to check penguin death
+    checkPenguinDeath() {
+        if (this.penguin.health > 0) return;
+
+        this.penguin.setVisible(false);
+
+        // Play explosion soundd
+        this.sound.play('death', {
+            volume: 1,
+            rate: 1 + Math.random() * 0.5  // Random pitch between 1.0 and 1.5
+        });
+
+        // Create explosion effect
+        const particleCount = 30;  // More particles
+        const colors = [0xff0000, 0xff6600, 0xffff00, 0xffffff]; // Added white for extra pop
+        
+        // Create blood splatter effect
+        for (let ring = 0; ring < 3; ring++) { // Reduced ring count
+            const delay = ring * 35; // Slower sequence
+            const scale = 2 + (ring * 0.6); // Smaller scaling
+            
+            for (let i = 0; i < particleCount; i++) {
+                // Create random angles for splatter look
+                const angle = (i / particleCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
+                const speed = 200 + Math.random() * 300; // Lower speeds
+                const distance = 5 + Math.random() * 20;
+                
+                // Create blood droplet particle
+                const particle = this.add.sprite(
+                    this.penguin.x + Math.cos(angle) * distance,
+                    this.penguin.y + Math.sin(angle) * distance,
+                    'bullet'
+                );
+                
+                // Set to red tint
+                particle.setTint(0xff0000);
+                particle.setScale(scale * (0.5 + Math.random()));
+                particle.setAlpha(0.7 + Math.random() * 0.2);
+                
+                // Add rotation to particles
+                particle.rotation = Math.random() * Math.PI * 2;
+                
+                this.time.delayedCall(delay, () => {
+                    // Initial "burst" tween
+                    this.tweens.add({
+                        targets: particle,
+                        scale: particle.scale * 1.2,
+                        duration: 100,
+                        onComplete: () => {
+                            // Main trajectory tween
+                            this.tweens.add({
+                                targets: particle,
+                                x: particle.x + Math.cos(angle) * speed,
+                                y: particle.y + Math.sin(angle) * speed + 200, // Less gravity
+                                alpha: 0,
+                                scale: scale * 0.2,
+                                rotation: particle.rotation + (Math.random() * 3 - 1.5) * Math.PI,
+                                duration: 600 + Math.random() * 300,
+                                ease: 'Power3.easeOut',
+                                onComplete: () => particle.destroy()
+                            });
+                        }
+                    });
+                });
+            }
+        }
+
+        this.isGameFrozen = true;
+        this.physics.pause();
+
+        // Show death screen after a short delay to let particles play
+        this.time.delayedCall(800, () => {
+            this.showDeathScreen();
+        });
+    }
+
+    // Function to create a death screen with a restart button
+    showDeathScreen() {
+        const centerX = this.game.config.width / 2;
+        const centerY = this.game.config.height / 2;
+
+        // Create dark overlay with fade in
+        const overlay = this.add.rectangle(centerX, centerY, this.game.config.width, this.game.config.height, 0x000000, 0);
+        overlay.setDepth(10);
+        this.tweens.add({
+            targets: overlay,
+            alpha: 0.97, // Increased darkness further
+            duration: 800,
+            ease: 'Power3'
+        });
+
+        // Create death message with animation
+        const deathText = this.add.text(centerX, centerY - 100, 'YOU DIED', {
+            fontSize: '64px',
+            fill: '#ff0000',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 6,
+            shadow: { blur: 10, color: '#ff0000', fill: true }
+        }).setOrigin(0.5).setDepth(11).setAlpha(0).setScale(0.5);
+
+        // Animate death text
+        this.tweens.add({
+            targets: deathText,
+            alpha: 1,
+            scale: 1,
+            duration: 800,
+            ease: 'Back.out'
+        });
+
+        // Array of possible death messages
+        const deathMessages = [
+            'Lost the battle, but not the war',
+            'Keep your head up king',
+            'You fought well', 
+            'The darkness claims another',
+            'Your journey ends here',
+            'Even penguins fall in battle',
+            'A warrior\'s waddle ends here',
+            'The ice flows red today',
+            'Not even arctic training could save you',
+            'Your flippers fought bravely',
+            'The emperor has fallen',
+            'A cold day for penguin-kind',
+            'Your fish-fueled fury wasn\'t enough'
+        ];
+
+        // Show floor reached
+        const floorText = this.add.text(centerX, centerY - 20, `Floor ${this.floorLevel}`, {
+            fontSize: '36px',
+            fill: '#ffffff',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5).setDepth(11).setAlpha(0);
+
+        // Show random death message
+        const messageText = this.add.text(centerX, centerY + 20, deathMessages[Math.floor(Math.random() * deathMessages.length)], {
+            fontSize: '28px',
+            fill: '#ffffff',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5).setDepth(11).setAlpha(0);
+
+        // Show high score
+        const highScore = this.getHighScore();
+        const highScoreText = this.add.text(centerX, centerY + 60, `High Score: Floor ${highScore}`, {
+            fontSize: '24px',
+            fill: '#ffd700',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5).setDepth(11).setAlpha(0);
+
+        // Fade in stats
+        this.tweens.add({
+            targets: [floorText, messageText, highScoreText],
+            alpha: 1,
+            duration: 500,
+            delay: 600
+        });
+
+        // Create restart button with gradient and glow
+        const restartButton = this.add.text(centerX, centerY + 120, 'Restart', {
+            fontSize: '36px',
+            fill: '#ffffff',
+            backgroundColor: '#4a0000',
+            padding: { left: 25, right: 25, top: 12, bottom: 12 },
+            stroke: '#000000',
+            strokeThickness: 4,
+            shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 2, fill: true }
+        }).setOrigin(0.5).setInteractive().setDepth(11);
+
+        // Add pulsing effect to button
+        this.tweens.add({
+            targets: restartButton,
+            scale: 1.1,
+            duration: 1000,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.inOut'
+        });
+
+        // Restart game on button click
+        restartButton.on('pointerdown', () => {
+            this.scene.restart();
+        });
+
+        // Enhanced hover effects
+        restartButton.on('pointerover', () => {
+            restartButton.setBackgroundColor('#800000');
+            restartButton.setScale(1.1);
+            this.game.canvas.style.cursor = 'pointer';
+        });
+        
+        restartButton.on('pointerout', () => {
+            restartButton.setBackgroundColor('#4a0000');
+            restartButton.setScale(1);
+            this.game.canvas.style.cursor = 'default';
+        });
+    }
+    
+    getHighScore() {
+        return localStorage.getItem('highScore') ? parseInt(localStorage.getItem('highScore')) : 1;
+    }
+    
+    setHighScore(newScore) {
+        localStorage.setItem('highScore', newScore);
+    }
+    
     handlePickup() {
         const PICKUP_RANGE = 50; // Distance in pixels within which pickup is possible
         
@@ -474,10 +718,19 @@ class TestLevel extends Phaser.Scene {
         
         // Add overlap with player
         this.physics.add.overlap(this.penguin, this.ladder, () => {
-            // Handle level completion here
             console.log('Level Complete!');
+
+            this.floorLevel += 1;
+            this.floorLevelText.setText('Floor Level: ' + this.floorLevel);
+
+            // Check if new high score is reached
+            if (this.floorLevel > this.highScore) {
+                this.highScore = this.floorLevel;
+                this.setHighScore(this.highScore); // Save to local storage
+                this.highScoreText.setText('High Score: ' + this.highScore);
+            }
+
             this.scene.start('TestLevel');
-            // You can add your level completion logic here
         });
     }
 

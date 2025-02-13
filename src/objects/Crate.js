@@ -9,7 +9,7 @@ class Crate extends Phaser.Physics.Arcade.Sprite {
         this.body.setAllowGravity(false);
         this.body.moves = true;
         this.body.setDrag(0.5);
-        this.body.setBounce(0.2);
+        this.body.setBounce(1);
         this.body.setMass(1);
     }
 

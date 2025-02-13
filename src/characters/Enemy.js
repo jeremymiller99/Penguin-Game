@@ -205,8 +205,11 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         // Destroy the enemy
         this.destroy();
 
-        // Check if the ladder should be spawned
-        if (scene.enemies.getChildren().length <= 1) {
+        // Check if this was the last enemy and handle ladder spawning
+        const remainingEnemies = scene.enemies.getChildren().length;
+        const ladderExists = scene.ladder && scene.ladder.active;
+        
+        if (!ladderExists && (remainingEnemies === 0 || remainingEnemies === 1)) {
             scene.spawnLadder();
         }
     }
