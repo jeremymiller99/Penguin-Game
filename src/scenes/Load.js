@@ -11,6 +11,9 @@ class Load extends Phaser.Scene {
         this.load.image('ladder', './assets/ladder.png');
         this.load.image('shop_open', './assets/shop_open.png');
         this.load.image('shop_empty', './assets/shop_empty.png');
+        this.load.image('icn_bullet', './assets/icons/icn_bullet.png');
+        this.load.image('icn_cash', './assets/icons/icn_cash.png');
+        this.load.image('icn_fish', './assets/icons/icn_fish.png');
         this.load.spritesheet('enemySprite', './assets/hazmat_guy.png', { frameWidth: 16, frameHeight: 16 });
 
         const bulletGraphics = this.add.graphics();

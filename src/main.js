@@ -1,5 +1,5 @@
 // Jeremy Miller
-// Time Spent: 
+// Time Spent: 30-40 hours
 // Penguin Game
 
 let config = {

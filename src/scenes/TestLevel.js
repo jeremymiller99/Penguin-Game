@@ -8,6 +8,7 @@ class TestLevel extends Phaser.Scene {
         this.floorLevel = 1; // Initialize Floor Level
         this.highScore = this.getHighScore(); // Load high score from storage
         this.floorLevelText = null;
+        this.highscoreText = null;
     }
 
     create() {
@@ -68,12 +69,6 @@ class TestLevel extends Phaser.Scene {
             const randomY = Phaser.Math.Between(100, this.game.config.height - 100);
             this.spawnEnemy(randomType, randomX, randomY);
         }
-
-        // Create a text object to display the ammo count
-        this.ammoText = this.add.text(10, 10, 'Ammo: ' + this.ak47.currentAmmo, {
-            fontSize: '20px',
-            fill: '#ffffff'
-        });
 
         // Create a physics group to manage crates
         this.crates = this.physics.add.group({
@@ -159,37 +154,87 @@ class TestLevel extends Phaser.Scene {
             this
         );
 
-        // Create health bars
-        this.playerHealthBar = this.drawHealthBar(this.penguin, 10, 40);
+        // Create HUD container along the top of the screen
+        const hudContainer = this.add.container(10, 10);
 
-        // Add cash group
+        // Starting x position
+        let xPos = 20;
+        const yPos = 30;
+        const spacing = 120;
+        const iconScale = 3;
+
+        // Health section
+        const healthIcon = this.add.sprite(xPos, yPos, 'icn_fish').setScale(iconScale);
+        hudContainer.add(healthIcon);
+        
+        xPos += 30;
+        this.playerHealthBar = this.drawHealthBar(this.penguin, xPos, yPos, 160, 14);
+        this.playerHealthBar.background.setAlpha(0.3);
+        this.playerHealthBar.foreground.setFillStyle(0xff3838);
+        const healthGradient = this.add.graphics();
+        healthGradient.fillGradientStyle(0xff5555, 0xff3838, 0xff5555, 0xff3838, 0.8);
+        hudContainer.add(healthGradient);
+        hudContainer.add(this.playerHealthBar.background);
+        hudContainer.add(this.playerHealthBar.foreground);
+
+        // Ammo section
+        xPos += spacing + 80;
+        const ammoIcon = this.add.sprite(xPos, yPos, 'icn_bullet').setScale(iconScale);
+        hudContainer.add(ammoIcon);
+
+        xPos += 20;
+        this.ammoText = this.add.text(xPos, yPos - 15, this.ak47.currentAmmo + ' / ' + this.ak47.maxAmmo, {
+            fontSize: '28px',
+            fontFamily: 'Arial Black',
+            fontWeight: 'bold',
+            fill: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 4
+        });
+        hudContainer.add(this.ammoText);
+
+        // Cash section
+        xPos += spacing + 40;
+        const coinIcon = this.add.sprite(xPos, yPos, 'icn_cash').setScale(iconScale);
+        hudContainer.add(coinIcon);
+        
+        xPos += 20;
+        this.currencyText = this.add.text(xPos, yPos - 15, '$' + this.playerCurrency, {
+            fontSize: '28px',
+            fontFamily: 'Arial Black',
+            fontWeight: 'bold',
+            fill: '#ffd700',
+            stroke: '#000000',
+            strokeThickness: 4
+        });
+        hudContainer.add(this.currencyText);
+
+        // Floor level section
+        xPos += 100;
+        const floorIcon = this.add.sprite(xPos, yPos, 'ladder').setScale(2);
+        hudContainer.add(floorIcon);
+
+        xPos += 20;
+        this.floorLevelText = this.add.text(xPos, yPos - 15, 'Floor ' + this.floorLevel, {
+            fontSize: '28px',
+            fontFamily: 'Arial Black',
+            fontWeight: 'bold',
+            fill: '#4287f5',
+            stroke: '#000000',
+            strokeThickness: 4
+        });
+        hudContainer.add(this.floorLevelText);
+
+        // Add cash group with enhanced particle effects
         this.cash = this.physics.add.group({
             classType: Cash,
             runChildUpdate: true
         });
 
-        // Add currency text display (add after ammoText creation)
-        this.currencyText = this.add.text(10, 70, 'Cash: ' + this.playerCurrency, {
-            fontSize: '20px',
-            fill: '#ffffff'
-        });
-
-        // Create a text object to display the Floor Level
-        this.floorLevelText = this.add.text(10, 100, 'Floor Level: ' + this.floorLevel, {
-            fontSize: '20px',
-            fill: '#ffffff'
-        });
-
-        // Create a text object to display the Floor Level
-        this.floorLevelText = this.add.text(10, 100, 'Floor Level: ' + this.floorLevel, {
-            fontSize: '20px',
-            fill: '#ffffff'
-        });
-
         // Add collision between penguin and coins
         this.physics.add.overlap(this.penguin, this.cash, (penguin, cash) => {
             this.playerCurrency += cash.value;
-            this.currencyText.setText('Cash: ' + this.playerCurrency);
+            this.currencyText.setText('$' + this.playerCurrency);
             
             // Play pickup sound
             this.sound.play('cashPickup', { 
@@ -249,7 +294,7 @@ class TestLevel extends Phaser.Scene {
         this.ak47.update(this.time.now);
 
         // Update the ammo count display
-        this.ammoText.setText('Ammo: ' + this.ak47.currentAmmo);
+        this.ammoText.setText(this.ak47.currentAmmo + ' / ' + this.ak47.maxAmmo);
 
         // Update all enemies
         this.enemies.getChildren().forEach(enemy => {
@@ -850,35 +895,6 @@ class TestLevel extends Phaser.Scene {
         const crate = new Crate(this, spawnX, spawnY);
         this.crates.add(crate);
         return crate;
-    }
-
-    checkForShopSpawn() {
-        // If shop hasn't been spawned yet, spawn it with a 50/50 chance
-        if (!this.shop && Math.random() < 0.5) {
-            this.spawnShop();
-        }
-
-        // Check if enemies are still alive
-        if (this.enemies.countActive(true) > 0) {
-            // Create temporary floating text above enemies
-            const textX = this.penguin.x;
-            const textY = this.penguin.y - 50;
-            const floatingText = this.add.text(textX, textY, 'It is not safe to shop', {
-                fontSize: '16px',
-                fill: '#ff0000'
-            }).setOrigin(0.5);
-
-            // Fade out and destroy after 2 seconds
-            this.tweens.add({
-                targets: floatingText,
-                alpha: 0,
-                y: textY - 20,
-                duration: 2000,
-                onComplete: () => {
-                    floatingText.destroy();
-                }
-            });
-        }
     }
 
     spawnShop() {
