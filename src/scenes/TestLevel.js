@@ -200,6 +200,7 @@ class TestLevel extends Phaser.Scene {
             cash.destroy();
         }, null, this);
 
+        this.spawnShop();
         // Add this at the end of create()
         this.startCountdown();
     }
@@ -562,10 +563,18 @@ class TestLevel extends Phaser.Scene {
         
         // If enemy died, spawn cash
         if (enemy.health <= 0) {
+            // Emit an event when an enemy is killed
+            this.events.emit('enemyKilled');
+
             // Spawn 1-3 cash drops
             const cashCount = Phaser.Math.Between(1, 3);
             for (let i = 0; i < cashCount; i++) {
                 this.cash.add(new Cash(this, enemy.x, enemy.y));
+            }
+
+            // Check if all enemies are dead and update shop animation
+            if (this.enemies.countActive(true) === 0 && this.shop) {
+                this.shop.handleShopAnimation(this);
             }
         }
 
@@ -841,5 +850,48 @@ class TestLevel extends Phaser.Scene {
         const crate = new Crate(this, spawnX, spawnY);
         this.crates.add(crate);
         return crate;
+    }
+
+    checkForShopSpawn() {
+        // If shop hasn't been spawned yet, spawn it with a 50/50 chance
+        if (!this.shop && Math.random() < 0.5) {
+            this.spawnShop();
+        }
+
+        // Check if enemies are still alive
+        if (this.enemies.countActive(true) > 0) {
+            // Create temporary floating text above enemies
+            const textX = this.penguin.x;
+            const textY = this.penguin.y - 50;
+            const floatingText = this.add.text(textX, textY, 'It is not safe to shop', {
+                fontSize: '16px',
+                fill: '#ff0000'
+            }).setOrigin(0.5);
+
+            // Fade out and destroy after 2 seconds
+            this.tweens.add({
+                targets: floatingText,
+                alpha: 0,
+                y: textY - 20,
+                duration: 2000,
+                onComplete: () => {
+                    floatingText.destroy();
+                }
+            });
+        }
+    }
+
+    spawnShop() {
+        this.shop = new Shop(this);
+        
+        // Add collision with player
+        this.physics.add.collider(this.penguin, this.shop);
+
+        // Add shop to update loop
+        this.events.on('update', () => {
+            if (this.shop) {
+                this.shop.update(this);
+            }
+        });
     }
 }

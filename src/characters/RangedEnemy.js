@@ -41,7 +41,7 @@ class RangedEnemy extends Enemy {
             this.play('enemy_walk', true);
         } else {
             this.setVelocity(0, 0);
-            this.play('ranged_idle', true);
+            this.play('enemy_idle', true);
         }
 
         // Update gun and shoot when in range
