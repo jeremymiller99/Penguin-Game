@@ -574,7 +574,7 @@ class TestLevel extends Phaser.Scene {
 
             // Check if all enemies are dead and update shop animation
             if (this.enemies.countActive(true) === 0 && this.shop) {
-                this.shop.handleShopAnimation(this);
+                this.shop.handleShopSprite(this);
             }
         }
 
