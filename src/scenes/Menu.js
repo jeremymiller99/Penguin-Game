@@ -4,9 +4,19 @@ class Menu extends Phaser.Scene {
     }
 
     create() {
+        // Create the music instance
+        this.bgMusic = this.sound.add('music_with_enemies', {
+            volume: 0.3,
+            loop: true
+        });
+        
+        // Start playing
+        this.bgMusic.play();
+
         const centerX = this.game.config.width / 2;
         const centerY = this.game.config.height / 2;
 
+        
         // Create dark background with enhanced scanlines effect
         const background = this.add.rectangle(centerX, centerY, this.game.config.width, this.game.config.height, 0x001100);
         background.setAlpha(0.97);
@@ -73,7 +83,7 @@ class Menu extends Phaser.Scene {
 
         // Show high score with enhanced styling
         const highScore = this.scene.get('TestLevel').getHighScore() || 0;
-        const recordText = this.add.text(centerX, centerY, 
+        const recordText = this.add.text(centerX, centerY + 225, 
             `HIGHEST FLOOR REACHED: ${highScore}`, {
             fontSize: '28px',
             fill: '#ffd700',
@@ -95,62 +105,156 @@ class Menu extends Phaser.Scene {
         });
 
         // Create enhanced start button with glowing effect
-        const startButton = this.add.container(centerX, centerY + 100);
+        const startButton = this.add.container(centerX, centerY);
+        const settingsButton = this.add.container(centerX, centerY + 80);
+        const creditsButton = this.add.container(centerX, centerY + 160);
         
-        const buttonGlow = this.add.rectangle(0, 0, 210, 70, 0xff0000, 0.2);
-        const buttonBase = this.add.rectangle(0, 0, 200, 60, 0x800000);
-        const buttonOverlay = this.add.rectangle(0, 0, 190, 50, 0x4a0000);
-        const buttonText = this.add.text(0, 0, 'START MISSION', {
-            fontSize: '24px',
-            fill: '#ffffff',
-            fontFamily: 'Courier',
-            fontStyle: 'bold',
-            shadow: { offsetX: 1, offsetY: 1, color: '#ff0000', blur: 5, fill: true }
-        }).setOrigin(0.5);
+        // Helper function to create button components
+        const createButtonComponents = (text) => {
+            return {
+                glow: this.add.rectangle(0, 0, 210, 70, 0xff0000, 0.2),
+                base: this.add.rectangle(0, 0, 200, 60, 0x800000),
+                overlay: this.add.rectangle(0, 0, 190, 50, 0x4a0000),
+                text: this.add.text(0, 0, text, {
+                    fontSize: '24px',
+                    fill: '#ffffff',
+                    fontFamily: 'Courier',
+                    fontStyle: 'bold',
+                    shadow: { offsetX: 1, offsetY: 1, color: '#ff0000', blur: 5, fill: true }
+                }).setOrigin(0.5)
+            };
+        };
 
-        startButton.add([buttonGlow, buttonBase, buttonOverlay, buttonText]);
-        startButton.setSize(200, 60);
-        startButton.setInteractive();
+        // Create components for each button
+        const startComponents = createButtonComponents('START MISSION');
+        const settingsComponents = createButtonComponents('SETTINGS');
+        const creditsComponents = createButtonComponents('CREDITS');
 
-        // Enhanced button interactions
-        startButton.on('pointerover', () => {
-            buttonOverlay.setFillStyle(0x600000);
-            this.game.canvas.style.cursor = 'pointer';
-            this.tweens.add({
-                targets: buttonGlow,
-                alpha: 0.4,
-                scale: 1.1,
-                duration: 200
-            });
-            this.tweens.add({
-                targets: buttonText,
-                scale: 1.1,
-                duration: 200
-            });
+        // Add components to containers
+        startButton.add([startComponents.glow, startComponents.base, startComponents.overlay, startComponents.text]);
+        settingsButton.add([settingsComponents.glow, settingsComponents.base, settingsComponents.overlay, settingsComponents.text]);
+        creditsButton.add([creditsComponents.glow, creditsComponents.base, creditsComponents.overlay, creditsComponents.text]);
+
+        // Set size and make interactive
+        [startButton, settingsButton, creditsButton].forEach(button => {
+            button.setSize(200, 60);
+            button.setInteractive();
         });
 
-        startButton.on('pointerout', () => {
-            buttonOverlay.setFillStyle(0x4a0000);
-            this.game.canvas.style.cursor = 'default';
-            this.tweens.add({
-                targets: [buttonGlow, buttonText],
-                alpha: 0.2,
-                scale: 1,
-                duration: 200
+        // Helper function for button interactions
+        const setupButtonInteractions = (button, components) => {
+            button.on('pointerover', () => {
+                components.overlay.setFillStyle(0x600000);
+                this.game.canvas.style.cursor = 'pointer';
+                this.tweens.add({
+                    targets: components.glow,
+                    alpha: 0.4,
+                    scale: 1.1,
+                    duration: 200
+                });
+                this.tweens.add({
+                    targets: components.text,
+                    scale: 1.1,
+                    duration: 200
+                });
             });
-        });
 
+            button.on('pointerout', () => {
+                components.overlay.setFillStyle(0x4a0000);
+                this.game.canvas.style.cursor = 'default';
+                this.tweens.add({
+                    targets: components.glow,
+                    alpha: 0.2,
+                    scale: 1,
+                    duration: 200
+                });
+                this.tweens.add({
+                    targets: components.text,
+                    scale: 1,
+                    duration: 200
+                });
+            });
+        };
+
+        // Setup interactions for all buttons
+        setupButtonInteractions(startButton, startComponents);
+        setupButtonInteractions(settingsButton, settingsComponents);
+        setupButtonInteractions(creditsButton, creditsComponents);
+
+        // Start button click handler (keep your existing one)
         startButton.on('pointerdown', () => {
-            this.cameras.main.flash(500, 0, 255, 0);
-            this.sound.play('tone');
             this.tweens.add({
-                targets: startButton,
-                scale: 0.9,
-                duration: 100,
-                yoyo: true
+                targets: this.bgMusic,
+                volume: 0,
+                duration: 500,
+                onComplete: () => {
+                    this.bgMusic.stop();
+                    this.cameras.main.flash(500, 0, 255, 0);
+                    this.sound.play('tone');
+                    this.scene.start('Briefing');
+                }
             });
-            this.time.delayedCall(500, () => {
-                this.scene.start('Briefing');
+        });
+
+        // Settings button click handler
+        settingsButton.on('pointerdown', () => {
+            // Add your settings logic here
+            console.log('Settings clicked');
+        });
+
+        // Credits button click handler
+        creditsButton.on('pointerdown', () => {
+            // Create semi-transparent background overlay
+            const overlay = this.add.rectangle(0, 0, this.game.config.width, this.game.config.height, 0x000000, 0.7);
+            overlay.setOrigin(0, 0);
+            overlay.setInteractive();
+
+            // Create popup container
+            const popup = this.add.container(centerX, -300); // Start above screen
+            
+            // Create popup background
+            const popupBg = this.add.rectangle(0, 0, 500, 400, 0x001100);
+            popupBg.setStrokeStyle(2, 0x00ff00);
+
+            // Create credits text
+            const creditsText = this.add.text(0, -20, 
+                'Programming - Jeremy Miller\n' +
+                'Art - Jeremy Miller\n' +
+                'Design - Jeremy Miller\n' +
+                'Music & Sound - Jeremy Miller\n\n' +
+                'Shoutout Cameron\n' +
+                'for testing and feedback\n\n' +
+                'Made for CM120,\n taught by Nathan Altice', {
+                fontSize: '24px',
+                fill: '#00ff00',
+                fontFamily: 'Courier',
+                align: 'center',
+                lineSpacing: 10
+            }).setOrigin(0.5);
+
+            // Add everything to the popup container
+            popup.add([popupBg, creditsText]);
+
+            // Animate popup in
+            this.tweens.add({
+                targets: popup,
+                y: centerY,
+                duration: 500,
+                ease: 'Back.out'
+            });
+
+            // Close popup when clicking overlay
+            overlay.on('pointerdown', () => {
+                this.tweens.add({
+                    targets: popup,
+                    y: this.game.config.height + 300,
+                    duration: 500,
+                    ease: 'Back.in',
+                    onComplete: () => {
+                        popup.destroy();
+                        overlay.destroy();
+                    }
+                });
             });
         });
 

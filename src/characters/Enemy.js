@@ -52,11 +52,12 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     attack(player, time) {
+        // Don't attack if game is frozen
+        if (this.scene.isGameFrozen) return;
+        
         if (time - this.lastAttackTime > this.attackCooldown) {
             console.log('Enemy attacks!');
-            // Implement attack logic here (e.g., reduce player health)sdw
-            player.health -= this.attackDamage; // Example: reduce player health by attackDamage
-            // Play sound effect
+            player.health -= this.attackDamage;
             this.scene.sound.play('hit', {
                 volume: 0.4,
                 rate: 0.8 + Math.random() * 0.4
@@ -212,5 +213,8 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         if (!ladderExists && (remainingEnemies === 0 || remainingEnemies === 1)) {
             scene.spawnLadder();
         }
+
+        // Update background music
+        scene.updateBackgroundMusic();
     }
 } 

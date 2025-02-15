@@ -4,6 +4,15 @@ class Briefing extends Phaser.Scene {
     }
 
     create() {
+        // Create the music instance
+        this.bgMusic = this.sound.add('music_no_enemies', {
+            volume: 0.3,
+            loop: true
+        });
+        
+        // Start playing
+        this.bgMusic.play();
+
         const centerX = this.game.config.width / 2;
         const centerY = this.game.config.height / 2;
 
@@ -196,13 +205,19 @@ class Briefing extends Phaser.Scene {
                 });
 
                 deployButton.on('pointerdown', () => {
-                    this.cameras.main.flash(500, 0, 255, 0);
-                    this.cameras.main.shake(200, 0.01);
-                    
-                    // Play deploy sound if we had one
-                    // this.sound.play('deploy');
-                    
-                    this.scene.start('TestLevel'); // Ensure this scene name is correct
+                    // First fade out music and wait for completion
+                    this.tweens.add({
+                        targets: this.bgMusic,
+                        volume: 0,
+                        duration: 500,
+                        onComplete: () => {
+                            this.bgMusic.stop();
+                            // After music fades, do visual effects and transition
+                            this.cameras.main.flash(500, 0, 255, 0);
+                            this.cameras.main.shake(200, 0.01);
+                            this.scene.start('TestLevel');
+                        }
+                    });
                 });
             }
         });

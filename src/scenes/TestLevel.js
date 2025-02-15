@@ -151,6 +151,7 @@ class TestLevel extends Phaser.Scene {
         this.playerHealthBar = this.drawHealthBar(this.penguin, xPos, yPos, 160, 14);
         this.playerHealthBar.background.setAlpha(0.3);
         this.playerHealthBar.foreground.setFillStyle(0xff3838);
+        this.playerHealthBar.foreground.width = 160; // Set initial width to full
         const healthGradient = this.add.graphics();
         healthGradient.fillGradientStyle(0xff5555, 0xff3838, 0xff5555, 0xff3838, 0.8);
         hudContainer.add(healthGradient);
@@ -228,6 +229,24 @@ class TestLevel extends Phaser.Scene {
         this.spawnShop();
         // Add this at the end of create()
         this.startCountdown();
+
+        // Initialize background music
+        this.musicWithEnemies = this.sound.add('music_with_enemies', {
+            loop: true,
+            volume: 0.3
+        });
+        this.musicNoEnemies = this.sound.add('music_no_enemies', {
+            loop: true,
+            volume: 0.3
+        });
+        
+        // Start with combat music since we spawn with enemies
+        this.musicWithEnemies.play();
+
+        this.events.on('shutdown', () => {
+            if (this.musicWithEnemies) this.musicWithEnemies.stop();
+            if (this.musicNoEnemies) this.musicNoEnemies.stop();
+        });
     }
 
     update() {
@@ -283,7 +302,7 @@ class TestLevel extends Phaser.Scene {
 
         // Update health bars
         const playerHealthPercent = this.penguin.health / this.penguin.maxHealth;
-        this.playerHealthBar.foreground.width = 80 * playerHealthPercent;
+        this.playerHealthBar.foreground.width = 160 * playerHealthPercent; // Use full width (160) as base
     }
 
     calculateVelocity() {
@@ -966,6 +985,36 @@ class TestLevel extends Phaser.Scene {
         // Spawn crates
         for (let i = 0; i < params.crateCount; i++) {
             this.spawnCrate();
+        }
+    }
+
+    updateBackgroundMusic() {
+        const hasEnemies = this.enemies.getChildren().length > 0;
+        const shouldPlayCombatMusic = hasEnemies;
+        
+        // If combat music should be playing but non-combat is playing (or vice versa)
+        if (shouldPlayCombatMusic && this.musicNoEnemies.isPlaying || 
+            !shouldPlayCombatMusic && this.musicWithEnemies.isPlaying) {
+            
+            // Fade out current music
+            const currentMusic = shouldPlayCombatMusic ? this.musicNoEnemies : this.musicWithEnemies;
+            const newMusic = shouldPlayCombatMusic ? this.musicWithEnemies : this.musicNoEnemies;
+            
+            this.tweens.add({
+                targets: currentMusic,
+                volume: 0,
+                duration: 1000,
+                onComplete: () => {
+                    currentMusic.stop();
+                    newMusic.play({ loop: !shouldPlayCombatMusic }); // Set loop true for no enemies music
+                    this.tweens.add({
+                        targets: newMusic,
+                        volume: 0.3,
+                        from: 0,
+                        duration: 1000
+                    });
+                }
+            });
         }
     }
 }
