@@ -142,7 +142,7 @@ class Briefing extends Phaser.Scene {
                 signed = true;
 
                 // Create deploy button immediately after signing
-                const deployButton = this.add.container(centerX, 400); // Adjusted y position
+                const deployButton = this.add.container(centerX, centerY); // Adjusted y position
                 
                 const buttonGlow = this.add.rectangle(0, 0, 210, 70, 0xff0000, 0.2);
                 const buttonBase = this.add.rectangle(0, 0, 200, 60, 0x800000);
@@ -205,17 +205,17 @@ class Briefing extends Phaser.Scene {
                 });
 
                 deployButton.on('pointerdown', () => {
-                    // First fade out music and wait for completion
                     this.tweens.add({
                         targets: this.bgMusic,
                         volume: 0,
                         duration: 500,
                         onComplete: () => {
                             this.bgMusic.stop();
-                            // After music fades, do visual effects and transition
-                            this.cameras.main.flash(500, 0, 255, 0);
-                            this.cameras.main.shake(200, 0.01);
-                            this.scene.start('TestLevel');
+                            // Fade to black instead of green flash
+                            this.cameras.main.fadeOut(500, 0, 0, 0);
+                            this.cameras.main.once('camerafadeoutcomplete', () => {
+                                this.scene.start('TestLevel');
+                            });
                         }
                     });
                 });

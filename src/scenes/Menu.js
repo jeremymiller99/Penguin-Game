@@ -189,9 +189,10 @@ class Menu extends Phaser.Scene {
                 duration: 500,
                 onComplete: () => {
                     this.bgMusic.stop();
-                    this.cameras.main.flash(500, 0, 255, 0);
-                    this.sound.play('tone');
-                    this.scene.start('Briefing');
+                    this.cameras.main.fadeOut(500, 0, 0, 0);
+                    this.cameras.main.once('camerafadeoutcomplete', () => {
+                        this.scene.start('Briefing');
+                    });
                 }
             });
         });
