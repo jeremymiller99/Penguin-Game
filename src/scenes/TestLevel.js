@@ -490,6 +490,10 @@ class TestLevel extends Phaser.Scene {
 
         // Restart game on button click
         restartButton.on('pointerdown', () => {
+            // Reset floor level to 1
+            this.floorLevel = 1;
+            // Reset high score in memory (but not in storage)
+            this.highScore = this.getHighScore();
             this.scene.restart();
         });
 
