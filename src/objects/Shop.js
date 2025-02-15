@@ -102,7 +102,7 @@ class Shop extends Phaser.GameObjects.Sprite {
         goldBorder.setStrokeStyle(4, 0xFFD700);
         menuContainer.add(goldBorder);
 
-        const titleText = scene.add.text(0, -200, 'MARKET', {
+        const titleText = scene.add.text(0, -200, 'SHOP', {
             fontSize: '48px',
             fill: '#FFD700',
             fontStyle: 'bold',
@@ -111,6 +111,17 @@ class Shop extends Phaser.GameObjects.Sprite {
             shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 2, fill: true }
         }).setOrigin(0.5);
         menuContainer.add(titleText);
+
+        // Add COMING SOON text in the middle
+        const comingSoonText = scene.add.text(0, 0, '[ COMING SOON ]', {
+            fontSize: '36px',
+            fill: '#FFD700',
+            fontStyle: 'bold',
+            fontFamily: 'Georgia',
+            padding: { x: 20, y: 10 },
+            shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 2, fill: true }
+        }).setOrigin(0.5);
+        menuContainer.add(comingSoonText);
 
         const closeButton = scene.add.rectangle(250, -200, 70, 50, 0x2a0000)
             .setInteractive().setOrigin(0.5);

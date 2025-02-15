@@ -198,8 +198,52 @@ class Menu extends Phaser.Scene {
 
         // Settings button click handler
         settingsButton.on('pointerdown', () => {
-            // Add your settings logic here
-            console.log('Settings clicked');
+            // Create semi-transparent background overlay
+            const overlay = this.add.rectangle(0, 0, this.game.config.width, this.game.config.height, 0x000000, 0.7);
+            overlay.setOrigin(0, 0);
+            overlay.setInteractive();
+
+            // Create popup container
+            const popup = this.add.container(centerX, -300); // Start above screen
+            
+            // Create popup background
+            const popupBg = this.add.rectangle(0, 0, 500, 400, 0x001100);
+            popupBg.setStrokeStyle(2, 0x00ff00);
+
+            // Create settings text
+            const settingsText = this.add.text(0, -20, 
+                '[COMING SOON]', {
+                fontSize: '24px',
+                fill: '#00ff00',
+                fontFamily: 'Courier',
+                align: 'center',
+                lineSpacing: 10
+            }).setOrigin(0.5);
+
+            // Add everything to the popup container
+            popup.add([popupBg, settingsText]);
+
+            // Animate popup in
+            this.tweens.add({
+                targets: popup,
+                y: centerY,
+                duration: 500,
+                ease: 'Back.out'
+            });
+
+            // Close popup when clicking overlay
+            overlay.on('pointerdown', () => {
+                this.tweens.add({
+                    targets: popup,
+                    y: this.game.config.height + 300,
+                    duration: 500,
+                    ease: 'Back.in',
+                    onComplete: () => {
+                        popup.destroy();
+                        overlay.destroy();
+                    }
+                });
+            });
         });
 
         // Credits button click handler
