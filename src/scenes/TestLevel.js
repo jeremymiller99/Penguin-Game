@@ -30,6 +30,13 @@ class TestLevel extends Phaser.Scene {
         // Set world bounds to match game config
         this.physics.world.setBounds(0, 0, this.game.config.width, this.game.config.height);
 
+        // Initialize groups first
+        this.enemies = this.physics.add.group();
+        this.crates = this.physics.add.group({
+            classType: Crate,
+            runChildUpdate: true
+        });
+
         // Add a penguin sprite to the center of the screen and scale it
         this.penguin = this.add.sprite(this.game.config.width / 2, this.game.config.height / 2, 'penguin').setScale(2);
         this.penguin.health = 100; // Add max health
@@ -56,35 +63,8 @@ class TestLevel extends Phaser.Scene {
         this.ak47 = new Gun(this, this.game.config.width / 2 + 50, this.game.config.height / 2);
         this.ak47.assignToPlayer(this.penguin);
 
-        // Create enemies group
-        this.enemies = this.physics.add.group();
-
-        // Randomly spawn 3-6 enemies of random types at random positions
-        const numEnemies = Phaser.Math.Between(3, 6);
-        const enemyTypes = ['ranged', 'melee', 'default'];
-        
-        for (let i = 0; i < numEnemies; i++) {
-            const randomType = enemyTypes[Phaser.Math.Between(0, enemyTypes.length - 1)];
-            const randomX = Phaser.Math.Between(100, this.game.config.width - 100);
-            const randomY = Phaser.Math.Between(100, this.game.config.height - 100);
-            this.spawnEnemy(randomType, randomX, randomY);
-        }
-
-        // Create a physics group to manage crates
-        this.crates = this.physics.add.group({
-            classType: Crate, // Ensure all objects in the group are instances of Crate
-            runChildUpdate: true
-        });
-
-        // Spawn 1-3 random crates
-        const numCrates = Phaser.Math.Between(1, 3);
-        for (let i = 0; i < numCrates; i++) {
-            const randomX = Phaser.Math.Between(100, this.game.config.width - 100);
-            const randomY = Phaser.Math.Between(100, this.game.config.height - 100);
-            const crate = new Crate(this, randomX, randomY);
-            this.crates.add(crate);
-            crate.setCollideWorldBounds(true);
-        }
+        // Spawn level entities after everything is initialized
+        this.spawnLevelEntities();
 
         // Add collision between penguin and crates with a debug log
         this.physics.add.collider(this.penguin, this.crates, () => {
@@ -736,13 +716,19 @@ class TestLevel extends Phaser.Scene {
             console.log('Level Complete!');
 
             this.floorLevel += 1;
-            this.floorLevelText.setText('Floor Level: ' + this.floorLevel);
+            if (this.floorLevelText) {
+                this.floorLevelText.setText('Floor Level: ' + this.floorLevel);
+            }
 
             // Check if new high score is reached
             if (this.floorLevel > this.highScore) {
                 this.highScore = this.floorLevel;
                 this.setHighScore(this.highScore); // Save to local storage
-                this.highScoreText.setText('High Score: ' + this.highScore);
+                
+                // Only update text if it exists
+                if (this.highScoreText && this.highScoreText.active) {
+                    this.highScoreText.setText('High Score: Floor ' + this.highScore);
+                }
             }
 
             this.scene.start('TestLevel');
@@ -909,5 +895,73 @@ class TestLevel extends Phaser.Scene {
                 this.shop.update(this);
             }
         });
+    }
+
+    calculateDifficultyParams(floorLevel) {
+        // Base values for floor 1
+        const baseEnemies = 2;
+        const baseCrates = 1;
+        
+        // Calculate scaled values based on floor level
+        const enemyCount = Math.min(Math.floor(baseEnemies + (floorLevel * 0.5)), 50); // Max 8 enemies
+        const crateCount = Math.min(Math.floor(baseCrates + (floorLevel * 0.3)), 5); // Max 5 crates
+        
+        // Calculate enemy type distribution
+        // Higher floors have more challenging enemies
+        let enemyTypeDistribution = {
+            default: 1,
+            melee: 0,
+            ranged: 0
+        };
+        
+        if (floorLevel >= 3) {
+            enemyTypeDistribution.melee = 1;
+        }
+        if (floorLevel >= 5) {
+            enemyTypeDistribution.ranged = 1;
+        }
+        
+        // Adjust probabilities based on floor level
+        if (floorLevel >= 7) {
+            enemyTypeDistribution.default *= 0.5;
+            enemyTypeDistribution.melee *= 1.5;
+            enemyTypeDistribution.ranged *= 2;
+        }
+        
+        return {
+            enemyCount,
+            crateCount,
+            enemyTypeDistribution
+        };
+    }
+
+    spawnLevelEntities() {
+        const params = this.calculateDifficultyParams(this.floorLevel);
+        
+        // Spawn enemies
+        for (let i = 0; i < params.enemyCount; i++) {
+            // Calculate enemy type based on distribution
+            const totalWeight = Object.values(params.enemyTypeDistribution).reduce((a, b) => a + b, 0);
+            let random = Math.random() * totalWeight;
+            let selectedType = 'default';
+            
+            for (const [type, weight] of Object.entries(params.enemyTypeDistribution)) {
+                if (random < weight) {
+                    selectedType = type;
+                    break;
+                }
+                random -= weight;
+            }
+            
+            // Spawn enemy with calculated position
+            const randomX = Phaser.Math.Between(100, this.game.config.width - 100);
+            const randomY = Phaser.Math.Between(100, this.game.config.height - 100);
+            this.spawnEnemy(selectedType, randomX, randomY);
+        }
+        
+        // Spawn crates
+        for (let i = 0; i < params.crateCount; i++) {
+            this.spawnCrate();
+        }
     }
 }
