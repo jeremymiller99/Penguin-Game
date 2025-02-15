@@ -8,7 +8,7 @@ class TestLevel extends Phaser.Scene {
         this.floorLevel = 1; // Initialize Floor Level
         this.highScore = this.getHighScore(); // Load high score from storage
         this.floorLevelText = null;
-        this.highscoreText = null;
+        this.highScoreText = null;
     }
 
     create() {
@@ -471,7 +471,7 @@ class TestLevel extends Phaser.Scene {
 
         // Show high score
         const highScore = this.getHighScore();
-        const highScoreText = this.add.text(centerX, centerY + 60, `High Score: Floor ${highScore}`, {
+        this.highScoreText = this.add.text(centerX, centerY + 60, `High Score: Floor ${highScore}`, {
             fontSize: '24px',
             fill: '#ffd700',
             fontStyle: 'bold',
@@ -481,7 +481,7 @@ class TestLevel extends Phaser.Scene {
 
         // Fade in stats
         this.tweens.add({
-            targets: [floorText, messageText, highScoreText],
+            targets: [floorText, messageText, this.highScoreText],
             alpha: 1,
             duration: 500,
             delay: 600
