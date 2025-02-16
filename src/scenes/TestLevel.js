@@ -37,6 +37,13 @@ class TestLevel extends Phaser.Scene {
             runChildUpdate: true
         });
 
+        // Add this after creating the crates group
+        this.crates.getChildren().forEach(crate => {
+            crate.body.setCollideWorldBounds(true);
+            crate.body.setBounce(0.6); // Adjust bounce factor (0 to 1)
+            crate.body.setDrag(100); // Add some drag to slow them down over time
+        });
+
         // Add a penguin sprite to the center of the screen and scale it
         this.penguin = this.add.sprite(this.game.config.width / 2, this.game.config.height / 2, 'penguin').setScale(2);
         this.penguin.health = 100; // Add max health
@@ -903,6 +910,12 @@ class TestLevel extends Phaser.Scene {
         
         const crate = new Crate(this, spawnX, spawnY);
         this.crates.add(crate);
+        
+        // Add physics properties to the new crate
+        crate.body.setCollideWorldBounds(true);
+        crate.body.setBounce(0.6);
+        crate.body.setDrag(100);
+        
         return crate;
     }
 

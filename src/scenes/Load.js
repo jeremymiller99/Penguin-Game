@@ -44,6 +44,12 @@ class Load extends Phaser.Scene {
         this.load.audio('music_with_enemies', './assets/sfx/music_with_enemies.wav');
         this.load.audio('music_no_enemies', './assets/sfx/music_no_enemies.wav');
 
+        // Cutscene Layers
+        this.load.image('cs_sky', './assets/cutscene/sky.png');
+        this.load.image('cs_mountain', './assets/cutscene/mountain.png');
+        this.load.image('cs_water', './assets/cutscene/water_2.png');
+        this.load.image('cs_mountain_bg', './assets/cutscene/mountain_bg.png');
+        this.load.image('cs_plane', './assets/cutscene/plane.png');
     }
 
     create() {

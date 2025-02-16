@@ -214,7 +214,7 @@ class Briefing extends Phaser.Scene {
                             // Fade to black instead of green flash
                             this.cameras.main.fadeOut(500, 0, 0, 0);
                             this.cameras.main.once('camerafadeoutcomplete', () => {
-                                this.scene.start('TestLevel');
+                                this.scene.start('Cutscene');
                             });
                         }
                     });
