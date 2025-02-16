@@ -60,7 +60,7 @@ class Menu extends Phaser.Scene {
         });
 
         // Create enhanced header with glowing effect
-        const headerText = this.add.text(centerX, 60, '⚠ OPERATION: P.E.N.G.U.I.N. ⚠', {
+        const headerText = this.add.text(centerX, 60, '⚠ OPERATION: ICE BREAK ⚠', {
             fontSize: '36px',
             fill: '#00ff00',
             fontStyle: 'bold',
