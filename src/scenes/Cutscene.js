@@ -45,6 +45,12 @@ class Cutscene extends Phaser.Scene {
             }
         ];
 
+        // Play plane sound at scene start with slower playback rate
+        this.sound.play('plane', { 
+            volume: 0.5,
+            rate: 0.5  // This makes the sound play at half speed
+        });
+
         // Create plane sprite
         this.plane = this.add.sprite(
             -100, // Start off-screen to the left
@@ -116,6 +122,9 @@ class Cutscene extends Phaser.Scene {
             planeY,  // Drop from plane's Y position
             'penguin'
         ).setScale(2).setDepth(3);
+
+        // Play penguin fall sound
+        this.sound.play('penguin_fall', { volume: 0.5 });
 
         // Add falling, scaling, and rotation animation
         this.tweens.add({
