@@ -5,14 +5,13 @@ class TestLevel extends Phaser.Scene {
         this.cash = null;
         this.currencyText = null;
         this.isGameFrozen = false;
-        this.floorLevel = 1; // Initialize Floor Level
-        this.highScore = this.getHighScore(); // Load high score from storage
+        this.floorLevel = 1;
+        this.highScore = this.getHighScore();
         this.floorLevelText = null;
         this.highScoreText = null;
     }
 
     create() {
-        // Set the background color of the scene
         this.cameras.main.setBackgroundColor('#87CEEB');
 
         // Create the tilemap using the loaded JSON
@@ -37,17 +36,18 @@ class TestLevel extends Phaser.Scene {
             runChildUpdate: true
         });
 
-        // Add this after creating the crates group
+        // Crate Properties
         this.crates.getChildren().forEach(crate => {
             crate.body.setCollideWorldBounds(true);
-            crate.body.setBounce(0.6); // Adjust bounce factor (0 to 1)
-            crate.body.setDrag(100); // Add some drag to slow them down over time
+            crate.body.setBounce(0.6);
+            crate.body.setDrag(100);
         });
 
-        // Add a penguin sprite to the center of the screen and scale it
+        // Add penguin sprite and properties
         this.penguin = this.add.sprite(this.game.config.width / 2, this.game.config.height / 2, 'penguin').setScale(2);
-        this.penguin.health = 100; // Add max health
+        this.penguin.health = 100;
         this.penguin.maxHealth = 100;
+        this.moveSpeed = 200;
 
         // Enable physics on the penguin sprite and make it a dynamic body
         this.physics.add.existing(this.penguin, false); // false = dynamic body
@@ -63,22 +63,22 @@ class TestLevel extends Phaser.Scene {
             reload: Phaser.Input.Keyboard.KeyCodes.R
         });
 
-        // Set the movement speed of the penguin
-        this.moveSpeed = 200;
-
-        // Create a new gun object and set its scale
+        
+        // Create penguin gun object
         this.ak47 = new Gun(this, this.game.config.width / 2 + 50, this.game.config.height / 2);
         this.ak47.assignToPlayer(this.penguin);
 
-        // Spawn level entities after everything is initialized
+        // INITIALIZATION IS OVER ----------------------------------------------------------------------------
+
+        // Spawn level entities
         this.spawnLevelEntities();
 
-        // Add collision between penguin and crates with a debug log
+        // Add collision between penguin and crates
         this.physics.add.collider(this.penguin, this.crates, () => {
             console.log('Penguin and crate are colliding!');
         });
 
-        // Add collision between enemies and crates with a debug log
+        // Add collision between enemies and crates
         this.physics.add.collider(this.enemies, this.crates, () => {
             console.log('Enemy and crate are colliding!');
         });
@@ -87,7 +87,6 @@ class TestLevel extends Phaser.Scene {
         this.physics.add.collider(this.ak47.bullets, this.crates, (bullet, crate) => {
             bullet.destroy();
 
-            // Ensure the crate is an instance of Crate before calling explode()
             if (crate instanceof Crate) {
                 this.handleCrateExplosion(crate);
             } else {
@@ -110,7 +109,7 @@ class TestLevel extends Phaser.Scene {
         // Add collision between bullets and enemies
         this.physics.add.collider(this.ak47.bullets, this.enemies, this.handleBulletEnemyCollision, null, this);
 
-        // Add overlap detection for guns with debug logging
+        // Overlap detection for guns with debug logging
         this.physics.add.overlap(
             this.penguin,
             this.children.list.filter(child => child instanceof Gun),
@@ -140,6 +139,8 @@ class TestLevel extends Phaser.Scene {
             null,
             this
         );
+
+        // UI ------------------------------------------------------------------------------------------------
 
         // Create HUD container along the top of the screen
         const hudContainer = this.add.container(10, 10);
@@ -234,7 +235,7 @@ class TestLevel extends Phaser.Scene {
         }, null, this);
 
         this.spawnShop();
-        // Add this at the end of create()
+
         this.startCountdown();
 
         // Initialize background music
@@ -259,7 +260,6 @@ class TestLevel extends Phaser.Scene {
     update() {
         if (this.isGameFrozen) return;
         
-        // Check if penguin is dead
         if (this.penguin.health <= 0) {
             this.checkPenguinDeath();
             return;
@@ -939,7 +939,7 @@ class TestLevel extends Phaser.Scene {
         const baseCrates = 1;
         
         // Calculate scaled values based on floor level
-        const enemyCount = Math.min(Math.floor(baseEnemies + (floorLevel * 0.5)), 50); // Max 8 enemies
+        const enemyCount = Math.min(Math.floor(baseEnemies + (floorLevel * 0.5)), 50); // max 50 enemies
         const crateCount = Math.min(Math.floor(baseCrates + (floorLevel * 0.3)), 5); // Max 5 crates
         
         // Calculate enemy type distribution

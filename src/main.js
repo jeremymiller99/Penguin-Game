@@ -1,6 +1,7 @@
 // Jeremy Miller
-// Time Spent: 30-40 hours
-// Penguin Game
+// Time Spent: 40-50 hours
+// Operation: Ice Break
+// My game's creative tilt is that I have cutscenes and its not a regular endless runner.
 
 let config = {
     parent: 'game-canvas',

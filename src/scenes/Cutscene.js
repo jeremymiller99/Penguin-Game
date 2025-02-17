@@ -17,11 +17,11 @@ class Cutscene extends Phaser.Scene {
                 totalScroll: 0
             },
             {
-                sprite: this.add.tileSprite(0, 10, 
+                sprite: this.add.tileSprite(0, 100, 
                     this.game.config.width, 
                     this.game.config.height, 
                     'cs_mountain_bg'
-                ).setOrigin(0, 0).setDepth(1).setScale(4),
+                ).setOrigin(0, 0).setDepth(1).setScale(4).setAlpha(0.7),
                 speedX: 0.15,
                 totalScroll: 0
             },
