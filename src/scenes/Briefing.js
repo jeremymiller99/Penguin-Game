@@ -5,7 +5,7 @@ class Briefing extends Phaser.Scene {
 
     create() {
         // Create the music instance
-        this.bgMusic = this.sound.add('music_no_enemies', {
+        this.bgMusic = this.sound.add('briefing', {
             volume: 0.3,
             loop: true
         });

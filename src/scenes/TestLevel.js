@@ -239,6 +239,7 @@ class TestLevel extends Phaser.Scene {
         this.startCountdown();
 
         // Initialize background music
+        /* Original dual-music system
         this.musicWithEnemies = this.sound.add('music_with_enemies', {
             loop: true,
             volume: 0.3
@@ -250,10 +251,21 @@ class TestLevel extends Phaser.Scene {
         
         // Start with combat music since we spawn with enemies
         this.musicWithEnemies.play();
+        */
+
+        // Simple single music track
+        this.backgroundMusic = this.sound.add('song_1', {
+            loop: true,
+            volume: 0.3
+        });
+        this.backgroundMusic.play();
 
         this.events.on('shutdown', () => {
+            /* Original cleanup
             if (this.musicWithEnemies) this.musicWithEnemies.stop();
             if (this.musicNoEnemies) this.musicNoEnemies.stop();
+            */
+            if (this.backgroundMusic) this.backgroundMusic.stop();
         });
     }
 
@@ -1001,15 +1013,15 @@ class TestLevel extends Phaser.Scene {
         }
     }
 
+    // Comment out or remove the entire updateBackgroundMusic method since it's no longer needed
+    /*
     updateBackgroundMusic() {
         const hasEnemies = this.enemies.getChildren().length > 0;
         const shouldPlayCombatMusic = hasEnemies;
         
-        // If combat music should be playing but non-combat is playing (or vice versa)
         if (shouldPlayCombatMusic && this.musicNoEnemies.isPlaying || 
             !shouldPlayCombatMusic && this.musicWithEnemies.isPlaying) {
             
-            // Fade out current music
             const currentMusic = shouldPlayCombatMusic ? this.musicNoEnemies : this.musicWithEnemies;
             const newMusic = shouldPlayCombatMusic ? this.musicWithEnemies : this.musicNoEnemies;
             
@@ -1019,7 +1031,7 @@ class TestLevel extends Phaser.Scene {
                 duration: 1000,
                 onComplete: () => {
                     currentMusic.stop();
-                    newMusic.play({ loop: !shouldPlayCombatMusic }); // Set loop true for no enemies music
+                    newMusic.play({ loop: !shouldPlayCombatMusic });
                     this.tweens.add({
                         targets: newMusic,
                         volume: 0.3,
@@ -1030,4 +1042,5 @@ class TestLevel extends Phaser.Scene {
             });
         }
     }
+    */
 }

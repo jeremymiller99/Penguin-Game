@@ -5,7 +5,7 @@ class Menu extends Phaser.Scene {
 
     create() {
         // Create the music instance
-        this.bgMusic = this.sound.add('music_with_enemies', {
+        this.bgMusic = this.sound.add('main_menu', {
             volume: 0.3,
             loop: true
         });
