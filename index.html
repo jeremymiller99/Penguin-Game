@@ -16,8 +16,22 @@
         #game-canvas {
             margin: auto;
         }
+        canvas {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
     </style>
+    <script>
+        window.addEventListener('load', () => {
+            document.querySelector('canvas').addEventListener('contextmenu', e => {
+                e.preventDefault();
+            });
+        });
+    </script>
     <script src="lib/phaser.js"></script>
+    <script src="src/characters/PenguinStateMachine.js"></script>
     <script src="src/items/Cash.js"></script>
     <script src="src/objects/Ladder.js"></script>
     <script src="src/objects/Crate.js"></script>

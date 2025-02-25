@@ -215,6 +215,6 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         }
 
         // Update background music
-        scene.updateBackgroundMusic();
+        //scene.updateBackgroundMusic();
     }
 } 

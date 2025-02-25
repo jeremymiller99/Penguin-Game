@@ -267,49 +267,17 @@ class TestLevel extends Phaser.Scene {
             */
             if (this.backgroundMusic) this.backgroundMusic.stop();
         });
+
+        this.penguin.stateMachine = new PenguinStateMachine(this.penguin);
     }
 
     update() {
         if (this.isGameFrozen) return;
-        
-        if (this.penguin.health <= 0) {
-            this.checkPenguinDeath();
-            return;
+
+        // Update penguin state machine
+        if (!this.isGameFrozen) {
+            this.penguin.stateMachine.update();
         }
-
-        // Calculate the velocity based on input
-        const velocity = this.calculateVelocity();
-        
-        // Apply velocity to penguin's physics body
-        if (this.penguin && this.penguin.body) {
-            this.penguin.body.setVelocity(velocity.x, velocity.y);
-        }
-
-        // Play walking or idle animation based on movement
-        const currentAnimation = this.penguin.anims.getName();
-        const newAnimation = velocity.x !== 0 || velocity.y !== 0 ? 'walk_right' : 'idle';
-        if (currentAnimation !== newAnimation) {
-            this.penguin.play(newAnimation, true);
-        }
-
-        // Flip the penguin sprite based on direction
-        if (velocity.x < 0) {
-            this.penguin.flipX = true;
-        } else if (velocity.x > 0) {
-            this.penguin.flipX = false;
-        }
-
-        // Handle pickup and reload actions
-        if (Phaser.Input.Keyboard.JustDown(this.keys.pickup)) this.handlePickup();
-        if (Phaser.Input.Keyboard.JustDown(this.keys.reload) && this.ak47.player === this.penguin) this.ak47.reload();
-
-        // Auto-reload if ammo is zero
-        if (this.ak47.currentAmmo === 0 && this.ak47.player === this.penguin) {
-            this.ak47.reload();
-        }
-
-        // Update the gun
-        this.ak47.update(this.time.now);
 
         // Update the ammo count display
         this.ammoText.setText(this.ak47.currentAmmo + ' / ' + this.ak47.maxAmmo);
@@ -321,7 +289,7 @@ class TestLevel extends Phaser.Scene {
 
         // Update health bars
         const playerHealthPercent = this.penguin.health / this.penguin.maxHealth;
-        this.playerHealthBar.foreground.width = 160 * playerHealthPercent; // Use full width (160) as base
+        this.playerHealthBar.foreground.width = 160 * playerHealthPercent;
     }
 
     calculateVelocity() {

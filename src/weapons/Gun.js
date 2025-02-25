@@ -70,7 +70,7 @@ class Gun extends Phaser.GameObjects.Container {
     update(time) {
         if (!this.player) return;
 
-        // Update position to follow owner
+        // Always update position and rotation, regardless of reload state
         this.setPosition(this.player.x, this.player.y);
 
         // Handle rotation based on control type
@@ -92,8 +92,8 @@ class Gun extends Phaser.GameObjects.Container {
 
         this.gunSprite.flipY = Math.abs(this.rotation) > Math.PI / 2;
 
-        // Handle auto-fire when mouse is held down
-        if (this.isFiring && !this.isReloading && this.currentAmmo > 0) {
+        // Only handle firing if not reloading
+        if (!this.isReloading && this.isFiring && this.currentAmmo > 0) {
             if (time - this.lastFired >= this.fireDelay) {
                 this.fire(time);
             }
