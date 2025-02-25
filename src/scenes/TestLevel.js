@@ -714,44 +714,45 @@ class TestLevel extends Phaser.Scene {
             x = Phaser.Math.Between(100, this.game.config.width - 100);
             y = Phaser.Math.Between(100, this.game.config.height - 100);
             
-            // Check distance from penguin
             const distanceFromPenguin = Phaser.Math.Distance.Between(
                 x, y, this.penguin.x, this.penguin.y
             );
             
-            if (distanceFromPenguin > 100) { // Minimum 100 pixels from penguin
+            if (distanceFromPenguin > 100) {
                 validPosition = true;
             }
         }
         
         this.ladder = new Ladder(this, x, y);
         
-        // Modify ladder overlap handler
         this.physics.add.overlap(this.penguin, this.ladder, () => {
-            // Get current game map from registry
             const gameMap = this.registry.get('gameMap');
             
             if (gameMap) {
-                // Mark current node as completed
+                // Add current node to completed nodes if not already completed
                 if (!gameMap.completedNodes.includes(this.currentNodeId)) {
                     gameMap.completedNodes.push(this.currentNodeId);
-                    
-                    // Find the current node and make its connections available
-                    const currentNode = gameMap.nodes.find(n => n.id === this.currentNodeId);
-                    if (currentNode) {
-                        currentNode.connections.forEach(nodeId => {
-                            if (!gameMap.availableNodes.includes(nodeId)) {
-                                gameMap.availableNodes.push(nodeId);
-                            }
-                        });
-                    }
                 }
                 
-                // Update registry with new state
-                this.registry.set('gameMap', gameMap);
+                // Find the current node
+                const currentNode = gameMap.nodes.find(n => n.id === this.currentNodeId);
+                if (currentNode) {
+                    // Make all connections available if they're not already completed
+                    currentNode.connections.forEach(nodeId => {
+                        if (!gameMap.completedNodes.includes(nodeId) && !gameMap.availableNodes.includes(nodeId)) {
+                            gameMap.availableNodes.push(nodeId);
+                        }
+                    });
+                }
+                
+                // Update registry
+                this.registry.set('gameMap', {
+                    ...gameMap,
+                    completedNodes: [...gameMap.completedNodes],
+                    availableNodes: [...gameMap.availableNodes]
+                });
             }
             
-            // Return to map
             this.scene.start('Map');
         });
     }

@@ -9,29 +9,28 @@ class Map extends Phaser.Scene {
     }
 
     create() {
+        // Set background color
+        this.cameras.main.setBackgroundColor('#87CEEB');
+        
         // Check if a map already exists in the registry
         const existingMap = this.registry.get('gameMap');
         
         if (!existingMap) {
             // First time creating the map
-            this.cameras.main.setBackgroundColor('#87CEEB');
-            
             this.nodeTypes = {
-                BATTLE: { color: 0xff0000, sprite: 'enemySprite' },
-                ELITE: { color: 0xff6600, sprite: 'enemySprite' },
-                SHOP: { color: 0x00ff00, sprite: 'shop_empty' },
+                BATTLE: { color: 0xff4444, sprite: 'enemySprite' },
+                ELITE: { color: 0xff8800, sprite: 'enemySprite' },
+                SHOP: { color: 0x44ff44, sprite: 'shop_empty' },
                 BOSS: { color: 0x9932CC, sprite: 'enemySprite' }
             };
 
-            // Generate new map
             this.createMap();
             
-            // Store the generated map in registry
             this.registry.set('gameMap', {
                 nodes: this.nodes,
                 connections: this.connections,
                 completedNodes: [],
-                availableNodes: ['0-0'] // Start node is always available
+                availableNodes: ['0-0']
             });
         } else {
             // Map exists, load it from registry
@@ -40,56 +39,73 @@ class Map extends Phaser.Scene {
             this.completedNodes = new Set(existingMap.completedNodes);
             this.availableNodes = new Set(existingMap.availableNodes);
             
-            // Set up nodeTypes for existing map
             this.nodeTypes = {
-                BATTLE: { color: 0xff0000, sprite: 'enemySprite' },
-                ELITE: { color: 0xff6600, sprite: 'enemySprite' },
-                SHOP: { color: 0x00ff00, sprite: 'shop_empty' },
+                BATTLE: { color: 0xff4444, sprite: 'enemySprite' },
+                ELITE: { color: 0xff8800, sprite: 'enemySprite' },
+                SHOP: { color: 0x44ff44, sprite: 'shop_empty' },
                 BOSS: { color: 0x9932CC, sprite: 'enemySprite' }
             };
         }
 
-        // Draw the map
         this.drawConnections();
         this.drawNodes();
-        
-        // Update node visuals based on state
         this.updateNodeStates();
-        
-        // Add return to game button
+        this.addPenguinMarker();
         this.createReturnButton();
     }
 
     createMap() {
-        const levels = 5; // Number of vertical levels
-        const maxNodesPerLevel = 3; // Maximum nodes per level
+        const levels = 7; // Number of vertical levels
         const spacing = {
-            x: this.game.config.width / (maxNodesPerLevel + 1),
             y: this.game.config.height / (levels + 1)
         };
 
-        // Create nodes for each level
-        for (let level = 0; level < levels; level++) {
-            // Randomly decide number of nodes for this level (1-3)
-            // First and last level always have 1 node
-            const nodesInThisLevel = level === 0 || level === levels - 1 
-                ? 1 
-                : Math.floor(Math.random() * 3) + 1;
-            
-            for (let i = 0; i < nodesInThisLevel; i++) {
-                let nodeType;
-                if (level === 0) nodeType = 'BATTLE';
-                else if (level === levels - 1) nodeType = 'BOSS';
-                else nodeType = this.getRandomNodeType();
+        // Create starting node
+        const startNode = {
+            id: '0-0',
+            type: 'BATTLE',
+            position: {
+                x: this.game.config.width / 2,
+                y: spacing.y
+            },
+            connections: []
+        };
+        this.nodes.push(startNode);
 
-                // Calculate x position to center nodes
-                const xOffset = (maxNodesPerLevel - nodesInThisLevel) * spacing.x / 2;
+        // Create paths
+        const numPaths = Phaser.Math.Between(2, 3); // Random number of main paths
+        const pathOffsets = [];
+        
+        // Calculate horizontal offsets for each path
+        for (let i = 0; i < numPaths; i++) {
+            // Divide the width into sections, leaving margins
+            const margin = this.game.config.width * 0.2;
+            const availableWidth = this.game.config.width - (margin * 2);
+            const section = availableWidth / (numPaths - 1);
+            pathOffsets.push(margin + (section * i));
+        }
+
+        // Create nodes for each level (except start and boss)
+        for (let level = 1; level < levels - 1; level++) {
+            const nodesInThisLevel = level === 1 ? numPaths : Phaser.Math.Between(1, numPaths);
+            
+            // Randomly select which paths will have nodes this level
+            const selectedPaths = Phaser.Utils.Array.Shuffle([...pathOffsets])
+                .slice(0, nodesInThisLevel);
+
+            for (let i = 0; i < nodesInThisLevel; i++) {
+                const nodeType = this.getRandomNodeType();
                 
+                // Add some randomness to x position around the path
+                const baseX = selectedPaths[i];
+                const xVariance = 60; // Pixels of random variance
+                const x = baseX + Phaser.Math.Between(-xVariance, xVariance);
+
                 const node = {
                     id: `${level}-${i}`,
                     type: nodeType,
                     position: {
-                        x: xOffset + spacing.x * (i + 1),
+                        x: x,
                         y: spacing.y * (level + 1)
                     },
                     connections: []
@@ -99,8 +115,82 @@ class Map extends Phaser.Scene {
             }
         }
 
+        // Create boss node
+        const bossNode = {
+            id: `${levels-1}-0`,
+            type: 'BOSS',
+            position: {
+                x: this.game.config.width / 2,
+                y: spacing.y * levels
+            },
+            connections: []
+        };
+        this.nodes.push(bossNode);
+
         // Create connections between nodes
-        this.createConnections();
+        for (let level = 0; level < levels - 1; level++) {
+            const currentLevelNodes = this.nodes.filter(node => 
+                parseInt(node.id.split('-')[0]) === level
+            );
+            const nextLevelNodes = this.nodes.filter(node => 
+                parseInt(node.id.split('-')[0]) === level + 1
+            );
+
+            currentLevelNodes.forEach(currentNode => {
+                // Sort next level nodes by distance to current node
+                const sortedNextNodes = [...nextLevelNodes].sort((a, b) => {
+                    const distA = Phaser.Math.Distance.Between(
+                        currentNode.position.x, currentNode.position.y,
+                        a.position.x, a.position.y
+                    );
+                    const distB = Phaser.Math.Distance.Between(
+                        currentNode.position.x, currentNode.position.y,
+                        b.position.x, b.position.y
+                    );
+                    return distA - distB;
+                });
+
+                // Connect to 1-2 closest nodes in the NEXT level only
+                const numConnections = level === levels - 2 ? 1 : Phaser.Math.Between(1, 2);
+                const connections = sortedNextNodes.slice(0, numConnections);
+                
+                // Only connect to nodes in the next level
+                currentNode.connections = connections.map(node => node.id);
+            });
+        }
+
+        // Ensure all nodes in each level (except the first) have at least one connection from the previous level
+        for (let level = 1; level < levels; level++) {
+            const currentLevelNodes = this.nodes.filter(node => 
+                parseInt(node.id.split('-')[0]) === level
+            );
+            const prevLevelNodes = this.nodes.filter(node => 
+                parseInt(node.id.split('-')[0]) === level - 1
+            );
+
+            currentLevelNodes.forEach(node => {
+                const hasIncomingConnection = prevLevelNodes.some(prevNode => 
+                    prevNode.connections.includes(node.id)
+                );
+
+                if (!hasIncomingConnection && prevLevelNodes.length > 0) {
+                    // Connect to the closest previous level node
+                    const closestPrevNode = prevLevelNodes.sort((a, b) => {
+                        const distA = Phaser.Math.Distance.Between(
+                            node.position.x, node.position.y,
+                            a.position.x, a.position.y
+                        );
+                        const distB = Phaser.Math.Distance.Between(
+                            node.position.x, node.position.y,
+                            b.position.x, b.position.y
+                        );
+                        return distA - distB;
+                    })[0];
+                    
+                    closestPrevNode.connections.push(node.id);
+                }
+            });
+        }
     }
 
     getRandomNodeType() {
@@ -151,26 +241,33 @@ class Map extends Phaser.Scene {
     }
 
     drawNodes() {
-        this.nodes.forEach(node => {
-            const nodeConfig = this.nodeTypes[node.type];
-            
-            // Create node sprite/circle
-            const nodeSprite = this.add.sprite(node.position.x, node.position.y, nodeConfig.sprite)
-                .setScale(2)
-                .setTint(0x666666) // Greyed out
-                .setAlpha(0.5);    // Transparent
+        const nodeSize = 40; // Size of the square nodes
 
+        this.nodes.forEach(node => {
+            // Create square node
+            const nodeSprite = this.add.rectangle(
+                node.position.x, 
+                node.position.y, 
+                nodeSize, 
+                nodeSize, 
+                this.nodeTypes[node.type].color
+            );
+            
+            // Add border
+            nodeSprite.setStrokeStyle(2, 0xffffff);
+            
             // Store sprite reference in node object
             node.sprite = nodeSprite;
 
             // Add hover effect
+            nodeSprite.setInteractive();
             nodeSprite.on('pointerover', () => {
-                nodeSprite.setScale(2.5);
+                nodeSprite.setScale(1.2);
                 this.showNodeInfo(node);
             });
 
             nodeSprite.on('pointerout', () => {
-                nodeSprite.setScale(2);
+                nodeSprite.setScale(1);
                 this.hideNodeInfo();
             });
         });
@@ -193,17 +290,107 @@ class Map extends Phaser.Scene {
         if (this.nodeInfo) this.nodeInfo.destroy();
     }
 
-    handleNodeClick(node) {
-        this.currentNode = node;
-        // Store current map state in registry for persistence
-        this.registry.set('mapState', {
-            currentNode: this.currentNode,
-            completedNodes: Array.from(this.completedNodes),
-            availableNodes: Array.from(this.availableNodes)
-        });
+    addPenguinMarker() {
+        const currentNodeId = this.registry.get('gameMap')?.completedNodes?.length > 0 
+            ? this.registry.get('gameMap').completedNodes[this.registry.get('gameMap').completedNodes.length - 1]
+            : '0-0';
         
-        // Start the level
-        this.scene.start('TestLevel', { nodeId: node.id, nodeType: node.type });
+        const currentNode = this.nodes.find(node => node.id === currentNodeId);
+        
+        if (!currentNode) return;
+        
+        // Create penguin sprite (now positioned directly on the node)
+        this.penguinMarker = this.add.sprite(currentNode.position.x, currentNode.position.y - 15, 'penguin')
+            .setScale(2)
+            .play('idle');
+    }
+
+    handleNodeClick(node) {
+        const currentNodeId = this.registry.get('gameMap')?.completedNodes?.length > 0 
+            ? this.registry.get('gameMap').completedNodes[this.registry.get('gameMap').completedNodes.length - 1]
+            : '0-0';
+        
+        const currentNode = this.nodes.find(n => n.id === currentNodeId);
+        
+        // Special case for starting node (0-0)
+        if (node.id === '0-0' && !this.completedNodes.has('0-0')) {
+            this.scene.start('TestLevel', { nodeId: node.id, nodeType: node.type });
+            return;
+        }
+        
+        if (currentNode) {
+            // Check if the clicked node is directly connected to current node
+            const isConnected = currentNode.connections.includes(node.id) || 
+                              node.connections.includes(currentNode.id);
+            
+            // Only allow movement if the node is connected and either completed or available
+            if (isConnected && (this.completedNodes.has(node.id) || this.availableNodes.has(node.id))) {
+                // Create points along the connection line for the penguin to follow
+                const points = this.createPathPoints(currentNode, node);
+                
+                // Move penguin along the path
+                this.movePenguinAlongPath(points, () => {
+                    // After movement completes
+                    this.currentNode = node;
+                    
+                    // Update the registry with new current position
+                    const gameMap = this.registry.get('gameMap');
+                    const lastCompletedIndex = gameMap.completedNodes.length - 1;
+                    gameMap.completedNodes[lastCompletedIndex] = node.id;
+                    this.registry.set('gameMap', gameMap);
+                    
+                    // Only start the level if this is an unbeaten node
+                    if (!this.completedNodes.has(node.id)) {
+                        this.scene.start('TestLevel', { nodeId: node.id, nodeType: node.type });
+                    }
+                    
+                    // Update node states to reflect new position
+                    this.updateNodeStates();
+                });
+            }
+        }
+    }
+
+    createPathPoints(startNode, endNode) {
+        const points = [];
+        const numPoints = 20;
+        
+        for (let i = 0; i <= numPoints; i++) {
+            const t = i / numPoints;
+            points.push({
+                x: startNode.position.x + (endNode.position.x - startNode.position.x) * t,
+                y: (startNode.position.y - 15) + (endNode.position.y - startNode.position.y) * t - 15
+            });
+        }
+        
+        return points;
+    }
+
+    movePenguinAlongPath(points, onComplete) {
+        if (!this.penguinMarker || points.length < 2) {
+            onComplete();
+            return;
+        }
+
+        // Calculate direction for sprite flipping
+        const movingRight = points[points.length - 1].x > points[0].x;
+        this.penguinMarker.setFlipX(!movingRight);
+        
+        // Play walking animation
+        this.penguinMarker.play('walk_right');
+        
+        // Create tween configuration
+        this.tweens.add({
+            targets: this.penguinMarker,
+            x: points[points.length - 1].x,
+            y: points[points.length - 1].y,
+            duration: 1000,
+            ease: 'Linear',
+            onComplete: () => {
+                this.penguinMarker.play('idle');
+                onComplete();
+            }
+        });
     }
 
     createReturnButton() {
@@ -225,23 +412,68 @@ class Map extends Phaser.Scene {
         this.nodes.forEach(node => {
             if (!node.sprite) return;
             
+            // Clear any existing checkmark
+            if (node.checkmark) {
+                node.checkmark.destroy();
+                node.checkmark = null;
+            }
+            
+            // Get current node ID
+            const currentNodeId = this.registry.get('gameMap')?.completedNodes?.length > 0 
+                ? this.registry.get('gameMap').completedNodes[this.registry.get('gameMap').completedNodes.length - 1]
+                : '0-0';
+            
+            const currentNode = this.nodes.find(n => n.id === currentNodeId);
+            const isConnectedToCurrent = currentNode && 
+                (currentNode.connections.includes(node.id) || node.connections.includes(currentNode.id));
+            
             if (this.completedNodes.has(node.id)) {
                 // Completed nodes
+                const completedColor = Phaser.Display.Color.ValueToColor(this.nodeTypes[node.type].color)
+                    .darken(50)
+                    .color;
+                
                 node.sprite
-                    .setTint(0x666666)
-                    .setAlpha(0.5)
-                    .disableInteractive();
-            } else if (this.availableNodes.has(node.id) || node.id === '0-0') {
-                // Available nodes
+                    .setFillStyle(completedColor)
+                    .setAlpha(0.8);
+                
+                // Only make interactive if connected to current node
+                if (isConnectedToCurrent) {
+                    node.sprite
+                        .setInteractive()
+                        .on('pointerdown', () => this.handleNodeClick(node));
+                } else {
+                    node.sprite.disableInteractive();
+                }
+
+                // Add checkmark
+                node.checkmark = this.add.text(
+                    node.position.x, 
+                    node.position.y, 
+                    '✓', 
+                    { 
+                        fontSize: '24px',
+                        color: '#ffffff'
+                    }
+                ).setOrigin(0.5);
+            } else if (node.id === '0-0' && !this.completedNodes.has('0-0')) {
+                // Special case for unbeaten starting node
                 node.sprite
-                    .setTint(this.nodeTypes[node.type].color)
+                    .setFillStyle(this.nodeTypes[node.type].color)
+                    .setAlpha(1)
+                    .setInteractive()
+                    .on('pointerdown', () => this.handleNodeClick(node));
+            } else if ((this.availableNodes.has(node.id) || node.id === '0-0') && isConnectedToCurrent) {
+                // Available and connected nodes
+                node.sprite
+                    .setFillStyle(this.nodeTypes[node.type].color)
                     .setAlpha(1)
                     .setInteractive()
                     .on('pointerdown', () => this.handleNodeClick(node));
             } else {
-                // Locked nodes
+                // Locked or unconnected nodes
                 node.sprite
-                    .setTint(0x666666)
+                    .setFillStyle(0x666666)
                     .setAlpha(0.5)
                     .disableInteractive();
             }
