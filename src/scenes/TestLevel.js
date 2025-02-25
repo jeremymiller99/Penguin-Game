@@ -11,6 +11,11 @@ class TestLevel extends Phaser.Scene {
         this.highScoreText = null;
     }
 
+    init(data) {
+        this.currentNodeId = data.nodeId;
+        this.nodeType = data.nodeType;
+    }
+
     create() {
         this.cameras.main.setBackgroundColor('#87CEEB');
 
@@ -721,27 +726,33 @@ class TestLevel extends Phaser.Scene {
         
         this.ladder = new Ladder(this, x, y);
         
-        // Add overlap with player
+        // Modify ladder overlap handler
         this.physics.add.overlap(this.penguin, this.ladder, () => {
-            console.log('Level Complete!');
-
-            this.floorLevel += 1;
-            if (this.floorLevelText) {
-                this.floorLevelText.setText('Floor Level: ' + this.floorLevel);
-            }
-
-            // Check if new high score is reached
-            if (this.floorLevel > this.highScore) {
-                this.highScore = this.floorLevel;
-                this.setHighScore(this.highScore); // Save to local storage
-                
-                // Only update text if it exists
-                if (this.highScoreText && this.highScoreText.active) {
-                    this.highScoreText.setText('High Score: Floor ' + this.highScore);
+            // Get current game map from registry
+            const gameMap = this.registry.get('gameMap');
+            
+            if (gameMap) {
+                // Mark current node as completed
+                if (!gameMap.completedNodes.includes(this.currentNodeId)) {
+                    gameMap.completedNodes.push(this.currentNodeId);
+                    
+                    // Find the current node and make its connections available
+                    const currentNode = gameMap.nodes.find(n => n.id === this.currentNodeId);
+                    if (currentNode) {
+                        currentNode.connections.forEach(nodeId => {
+                            if (!gameMap.availableNodes.includes(nodeId)) {
+                                gameMap.availableNodes.push(nodeId);
+                            }
+                        });
+                    }
                 }
+                
+                // Update registry with new state
+                this.registry.set('gameMap', gameMap);
             }
-
-            this.scene.start('TestLevel');
+            
+            // Return to map
+            this.scene.start('Map');
         });
     }
 
