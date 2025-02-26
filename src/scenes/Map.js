@@ -82,7 +82,7 @@ class Map extends Phaser.Scene {
         this.nodes.push(startNode);
 
         // Create paths
-        const numPaths = Phaser.Math.Between(2, 3); // Random number of main paths
+        const numPaths = 3; // Always create 3 paths for first two levels
         const pathOffsets = [];
         
         // Calculate horizontal offsets for each path
@@ -96,18 +96,20 @@ class Map extends Phaser.Scene {
 
         // Create nodes for each level (except start and boss)
         for (let level = 1; level < levels - 1; level++) {
-            const nodesInThisLevel = level === 1 ? numPaths : Phaser.Math.Between(1, numPaths);
+            // Force 3 nodes for first two levels, then random afterwards
+            const nodesInThisLevel = (level <= 2) ? 3 : Phaser.Math.Between(1, 3);
             
-            // Randomly select which paths will have nodes this level
-            const selectedPaths = Phaser.Utils.Array.Shuffle([...pathOffsets])
-                .slice(0, nodesInThisLevel);
+            // For first two levels, use all paths
+            const selectedPaths = level <= 2 ? 
+                [...pathOffsets] : // Use all paths for first two levels
+                Phaser.Utils.Array.Shuffle([...pathOffsets]).slice(0, nodesInThisLevel);
 
             for (let i = 0; i < nodesInThisLevel; i++) {
                 const nodeType = this.getRandomNodeType();
                 
                 // Add some randomness to x position around the path
                 const baseX = selectedPaths[i];
-                const xVariance = 60; // Pixels of random variance
+                const xVariance = level <= 2 ? 30 : 60; // Less variance in first two levels
                 const x = baseX + Phaser.Math.Between(-xVariance, xVariance);
 
                 const node = {
@@ -317,11 +319,12 @@ class Map extends Phaser.Scene {
     handleNodeClick(node) {
         // Check if the clicked node is connected to current node
         const isConnected = this.isNodeConnected(node.id, this.currentNode);
+        const state = this.getNodeState(node);
         
-        // Allow clicking if node is connected and either:
-        // 1. It's an unbeaten node (available active)
-        // 2. It's a completed node that's connected (available completed)
-        if (isConnected && (this.availableNodes.has(node.id) || this.completedNodes.has(node.id))) {
+        // Allow clicking if node is connected AND either:
+        // 1. It's an available active node (unbeaten and connected)
+        // 2. It's an available completed node (beaten and connected)
+        if (isConnected && (state === NodeState.AVAILABLE_ACTIVE || state === NodeState.AVAILABLE_COMPLETED)) {
             const points = this.createPathPoints(
                 this.nodes.find(n => n.id === this.currentNode), 
                 node
@@ -330,7 +333,7 @@ class Map extends Phaser.Scene {
             this.movePenguinAlongPath(points, () => {
                 // If this is an unbeaten node, start the level
                 if (!this.completedNodes.has(node.id)) {
-                    this.currentNode = node.id; // Update current node before starting level
+                    this.currentNode = node.id;
                     
                     // Update registry before starting level
                     const gameMap = this.registry.get('gameMap');
@@ -574,8 +577,8 @@ class Map extends Phaser.Scene {
         
         // Create movement points
         const points = [
-            { x: this.game.config.width / 2, y: startY },
-            { x: startNode.position.x, y: startNode.position.y - 15 }  // -15 for penguin offset
+            { x: startNode.position.x, y: startNode.position.y - 100 }, // Point above node
+            { x: startNode.position.x, y: startNode.position.y } // Node position
         ];
         
         // Move penguin to starting node
@@ -586,54 +589,52 @@ class Map extends Phaser.Scene {
     }
 
     showStartConfirmation() {
-        // Create semi-transparent background
-        const bg = this.add.rectangle(
-            this.game.config.width / 2,
-            this.game.config.height / 2,
-            this.game.config.width,
-            this.game.config.height,
-            0x000000,
-            0.7
-        );
+        // Find the starting node position
+        const startNode = this.nodes.find(n => n.id === '0-0');
+        
+        // Create a simple text banner above the node
+        const banner = this.add.text(
+            startNode.position.x,
+            startNode.position.y - 32,  // Position above the node
+            'Press SPACE to begin',
+            {
+                fontSize: '18px',
+                fill: '#ffffff',
+                backgroundColor: '#000000',
+                padding: { x: 10, y: 5 },
+                align: 'center'
+            }
+        ).setOrigin(0.5);
 
-        // Create confirmation dialog
-        const dialog = this.add.container(this.game.config.width / 2, this.game.config.height / 2);
-        
-        const box = this.add.rectangle(0, 0, 400, 200, 0x333333)
-            .setStrokeStyle(2, 0xffffff);
-        
-        const text = this.add.text(0, -40, 'Ready to begin your adventure?', {
-            fontSize: '24px',
-            fill: '#ffffff',
-            align: 'center'
-        }).setOrigin(0.5);
-        
-        const confirmButton = this.add.rectangle(0, 30, 200, 40, 0x44ff44)
-            .setInteractive()
-            .on('pointerdown', () => {
-                // Clean up dialog
-                bg.destroy();
-                dialog.destroy();
-                
-                // Update registry and start level
-                const gameMap = this.registry.get('gameMap');
-                this.registry.set('gameMap', {
-                    ...gameMap,
-                    currentNode: this.currentNode
-                });
-                
-                // Start the first level
-                this.scene.start('TestLevel', {
-                    nodeId: '0-0',
-                    nodeType: 'BATTLE'
-                });
+        // Add a subtle bounce animation
+        this.tweens.add({
+            targets: banner,
+            y: banner.y - 5,
+            duration: 1000,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+
+        // Add space key listener
+        const spaceKey = this.input.keyboard.addKey('SPACE');
+        spaceKey.once('down', () => {
+            // Clean up
+            banner.destroy();
+            this.tweens.killTweensOf(banner);
+            
+            // Update registry and start level
+            const gameMap = this.registry.get('gameMap');
+            this.registry.set('gameMap', {
+                ...gameMap,
+                currentNode: this.currentNode
             });
-        
-        const confirmText = this.add.text(0, 30, 'Start', {
-            fontSize: '20px',
-            fill: '#ffffff'
-        }).setOrigin(0.5);
-        
-        dialog.add([box, text, confirmButton, confirmText]);
+            
+            // Start the first level
+            this.scene.start('TestLevel', {
+                nodeId: '0-0',
+                nodeType: 'BATTLE'
+            });
+        });
     }
 } 
