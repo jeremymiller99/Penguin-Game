@@ -1,9 +1,16 @@
+class NodeState {
+    static UNAVAILABLE_ACTIVE = 'UNAVAILABLE_ACTIVE';    // Unbeaten, can't reach yet
+    static AVAILABLE_ACTIVE = 'AVAILABLE_ACTIVE';        // Unbeaten, can access
+    static UNAVAILABLE_COMPLETED = 'UNAVAILABLE_COMPLETED'; // Beaten, can't reach
+    static AVAILABLE_COMPLETED = 'AVAILABLE_COMPLETED';   // Beaten, can access
+}
+
 class Map extends Phaser.Scene {
     constructor() {
         super('Map');
         this.nodes = [];
         this.connections = [];
-        this.currentNode = null;
+        this.currentNode = null;  // Will store just the current node ID
         this.completedNodes = new Set();
         this.availableNodes = new Set();
     }
@@ -25,12 +32,14 @@ class Map extends Phaser.Scene {
             };
 
             this.createMap();
+            this.currentNode = null;  // Start with no current node
             
             this.registry.set('gameMap', {
                 nodes: this.nodes,
                 connections: this.connections,
                 completedNodes: [],
-                availableNodes: ['0-0']
+                availableNodes: ['0-0'],
+                currentNode: null
             });
         } else {
             // Map exists, load it from registry
@@ -38,13 +47,7 @@ class Map extends Phaser.Scene {
             this.connections = existingMap.connections;
             this.completedNodes = new Set(existingMap.completedNodes);
             this.availableNodes = new Set(existingMap.availableNodes);
-            
-            this.nodeTypes = {
-                BATTLE: { color: 0xff4444, sprite: 'enemySprite' },
-                ELITE: { color: 0xff8800, sprite: 'enemySprite' },
-                SHOP: { color: 0x44ff44, sprite: 'shop_empty' },
-                BOSS: { color: 0x9932CC, sprite: 'enemySprite' }
-            };
+            this.currentNode = existingMap.currentNode;
         }
 
         this.drawConnections();
@@ -52,6 +55,12 @@ class Map extends Phaser.Scene {
         this.updateNodeStates();
         this.addPenguinMarker();
         this.createReturnButton();
+        this.debugNodeStatus();
+
+        // If this is first time (no current node), start FTUE sequence
+        if (!this.currentNode) {
+            this.startFTUESequence();
+        }
     }
 
     createMap() {
@@ -306,48 +315,52 @@ class Map extends Phaser.Scene {
     }
 
     handleNodeClick(node) {
-        const currentNodeId = this.registry.get('gameMap')?.completedNodes?.length > 0 
-            ? this.registry.get('gameMap').completedNodes[this.registry.get('gameMap').completedNodes.length - 1]
-            : '0-0';
+        // Check if the clicked node is connected to current node
+        const isConnected = this.isNodeConnected(node.id, this.currentNode);
         
-        const currentNode = this.nodes.find(n => n.id === currentNodeId);
-        
-        // Special case for starting node (0-0)
-        if (node.id === '0-0' && !this.completedNodes.has('0-0')) {
-            this.scene.start('TestLevel', { nodeId: node.id, nodeType: node.type });
-            return;
-        }
-        
-        if (currentNode) {
-            // Check if the clicked node is directly connected to current node
-            const isConnected = currentNode.connections.includes(node.id) || 
-                              node.connections.includes(currentNode.id);
+        // Allow clicking if node is connected and either:
+        // 1. It's an unbeaten node (available active)
+        // 2. It's a completed node that's connected (available completed)
+        if (isConnected && (this.availableNodes.has(node.id) || this.completedNodes.has(node.id))) {
+            const points = this.createPathPoints(
+                this.nodes.find(n => n.id === this.currentNode), 
+                node
+            );
             
-            // Only allow movement if the node is connected and either completed or available
-            if (isConnected && (this.completedNodes.has(node.id) || this.availableNodes.has(node.id))) {
-                // Create points along the connection line for the penguin to follow
-                const points = this.createPathPoints(currentNode, node);
-                
-                // Move penguin along the path
-                this.movePenguinAlongPath(points, () => {
-                    // After movement completes
-                    this.currentNode = node;
+            this.movePenguinAlongPath(points, () => {
+                // If this is an unbeaten node, start the level
+                if (!this.completedNodes.has(node.id)) {
+                    this.currentNode = node.id; // Update current node before starting level
                     
-                    // Update the registry with new current position
+                    // Update registry before starting level
                     const gameMap = this.registry.get('gameMap');
-                    const lastCompletedIndex = gameMap.completedNodes.length - 1;
-                    gameMap.completedNodes[lastCompletedIndex] = node.id;
-                    this.registry.set('gameMap', gameMap);
+                    this.registry.set('gameMap', {
+                        ...gameMap,
+                        currentNode: this.currentNode,
+                        completedNodes: Array.from(this.completedNodes),
+                        availableNodes: Array.from(this.availableNodes)
+                    });
                     
-                    // Only start the level if this is an unbeaten node
-                    if (!this.completedNodes.has(node.id)) {
-                        this.scene.start('TestLevel', { nodeId: node.id, nodeType: node.type });
-                    }
+                    this.scene.start('TestLevel', { 
+                        nodeId: node.id, 
+                        nodeType: node.type 
+                    });
+                } else {
+                    // Just moving to a completed node
+                    this.currentNode = node.id;
                     
-                    // Update node states to reflect new position
+                    // Update registry after movement
+                    const gameMap = this.registry.get('gameMap');
+                    this.registry.set('gameMap', {
+                        ...gameMap,
+                        currentNode: this.currentNode,
+                        completedNodes: Array.from(this.completedNodes),
+                        availableNodes: Array.from(this.availableNodes)
+                    });
+                    
                     this.updateNodeStates();
-                });
-            }
+                }
+            });
         }
     }
 
@@ -408,6 +421,64 @@ class Map extends Phaser.Scene {
         button.on('pointerdown', () => this.scene.start('TestLevel'));
     }
 
+    getNodeState(node) {
+        const isCompleted = this.completedNodes.has(node.id);
+        const isConnectedToCurrent = this.isNodeConnected(node.id, this.currentNode);
+
+        if (isCompleted) {
+            // Completed nodes are available if connected to current position
+            return isConnectedToCurrent ? NodeState.AVAILABLE_COMPLETED : NodeState.UNAVAILABLE_COMPLETED;
+        } else {
+            // Unbeaten nodes are available if connected to current position
+            return isConnectedToCurrent ? NodeState.AVAILABLE_ACTIVE : NodeState.UNAVAILABLE_ACTIVE;
+        }
+    }
+
+    isNodeConnected(nodeId, currentNodeId) {
+        if (!currentNodeId) return false;
+        const currentNode = this.nodes.find(n => n.id === currentNodeId);
+        return currentNode && (
+            currentNode.connections.includes(nodeId) ||
+            this.nodes.find(n => n.id === nodeId)?.connections.includes(currentNodeId)
+        );
+    }
+
+    debugNodeStatus() {
+        const availableActive = [];
+        const unavailableActive = [];
+        const availableCompleted = [];
+        const unavailableCompleted = [];
+
+        this.nodes.forEach(node => {
+            const state = this.getNodeState(node);
+            const nodeInfo = `${node.id} (${node.type})`;
+
+            switch (state) {
+                case NodeState.AVAILABLE_ACTIVE:
+                    availableActive.push(nodeInfo);
+                    break;
+                case NodeState.UNAVAILABLE_ACTIVE:
+                    unavailableActive.push(nodeInfo);
+                    break;
+                case NodeState.AVAILABLE_COMPLETED:
+                    availableCompleted.push(nodeInfo);
+                    break;
+                case NodeState.UNAVAILABLE_COMPLETED:
+                    unavailableCompleted.push(nodeInfo);
+                    break;
+            }
+        });
+
+        console.log('=== MAP NODE STATUS ===');
+        console.log('Current Node:', this.currentNode);
+        console.log('Available Active Nodes:', availableActive);
+        console.log('Unavailable Active Nodes:', unavailableActive);
+        console.log('Available Completed Nodes:', availableCompleted);
+        console.log('Unavailable Completed Nodes:', unavailableCompleted);
+        console.log('Current Registry State:', this.registry.get('gameMap'));
+        console.log('====================');
+    }
+
     updateNodeStates() {
         this.nodes.forEach(node => {
             if (!node.sprite) return;
@@ -417,18 +488,13 @@ class Map extends Phaser.Scene {
                 node.checkmark.destroy();
                 node.checkmark = null;
             }
+
+            const state = this.getNodeState(node);
+            const isCompleted = this.completedNodes.has(node.id);
             
-            // Get current node ID
-            const currentNodeId = this.registry.get('gameMap')?.completedNodes?.length > 0 
-                ? this.registry.get('gameMap').completedNodes[this.registry.get('gameMap').completedNodes.length - 1]
-                : '0-0';
-            
-            const currentNode = this.nodes.find(n => n.id === currentNodeId);
-            const isConnectedToCurrent = currentNode && 
-                (currentNode.connections.includes(node.id) || node.connections.includes(currentNode.id));
-            
-            if (this.completedNodes.has(node.id)) {
-                // Completed nodes
+            // Base appearance
+            if (isCompleted) {
+                // All completed nodes get darker color
                 const completedColor = Phaser.Display.Color.ValueToColor(this.nodeTypes[node.type].color)
                     .darken(50)
                     .color;
@@ -436,17 +502,8 @@ class Map extends Phaser.Scene {
                 node.sprite
                     .setFillStyle(completedColor)
                     .setAlpha(0.8);
-                
-                // Only make interactive if connected to current node
-                if (isConnectedToCurrent) {
-                    node.sprite
-                        .setInteractive()
-                        .on('pointerdown', () => this.handleNodeClick(node));
-                } else {
-                    node.sprite.disableInteractive();
-                }
 
-                // Add checkmark
+                // All completed nodes get checkmark
                 node.checkmark = this.add.text(
                     node.position.x, 
                     node.position.y, 
@@ -456,27 +513,127 @@ class Map extends Phaser.Scene {
                         color: '#ffffff'
                     }
                 ).setOrigin(0.5);
-            } else if (node.id === '0-0' && !this.completedNodes.has('0-0')) {
-                // Special case for unbeaten starting node
-                node.sprite
-                    .setFillStyle(this.nodeTypes[node.type].color)
-                    .setAlpha(1)
-                    .setInteractive()
-                    .on('pointerdown', () => this.handleNodeClick(node));
-            } else if ((this.availableNodes.has(node.id) || node.id === '0-0') && isConnectedToCurrent) {
-                // Available and connected nodes
-                node.sprite
-                    .setFillStyle(this.nodeTypes[node.type].color)
-                    .setAlpha(1)
-                    .setInteractive()
-                    .on('pointerdown', () => this.handleNodeClick(node));
             } else {
-                // Locked or unconnected nodes
+                // Non-completed nodes
                 node.sprite
-                    .setFillStyle(0x666666)
-                    .setAlpha(0.5)
-                    .disableInteractive();
+                    .setFillStyle(state === NodeState.AVAILABLE_ACTIVE ? 
+                        this.nodeTypes[node.type].color : 0x666666)
+                    .setAlpha(state === NodeState.AVAILABLE_ACTIVE ? 1 : 0.5);
+            }
+
+            // Interactivity
+            if (state === NodeState.AVAILABLE_ACTIVE || state === NodeState.AVAILABLE_COMPLETED) {
+                node.sprite
+                    .setInteractive()
+                    .on('pointerdown', () => this.handleNodeClick(node));
+                
+                // Add hover effects
+                node.sprite.on('pointerover', () => {
+                    node.sprite.setScale(1.2);
+                    this.showNodeInfo(node, isCompleted);
+                });
+                
+                node.sprite.on('pointerout', () => {
+                    node.sprite.setScale(1);
+                    this.hideNodeInfo();
+                });
+            } else {
+                node.sprite.disableInteractive();
             }
         });
+    }
+
+    showNodeInfo(node, isCompleted) {
+        if (this.nodeInfo) this.nodeInfo.destroy();
+        
+        let statusText;
+        if (isCompleted) {
+            statusText = '(Completed)';
+        } else {
+            const state = this.getNodeState(node);
+            statusText = state === NodeState.AVAILABLE_ACTIVE ? '(Available)' : '(Locked)';
+        }
+        
+        this.nodeInfo = this.add.text(node.position.x, node.position.y - 40, 
+            `${node.type}\n${statusText}`, {
+            fontSize: '16px',
+            fill: '#ffffff',
+            backgroundColor: '#000000',
+            padding: { x: 5, y: 5 },
+            align: 'center'
+        }).setOrigin(0.5);
+    }
+
+    startFTUESequence() {
+        // Position penguin at top center
+        const startY = 50;
+        this.penguinMarker.setPosition(this.game.config.width / 2, startY);
+        
+        // Find the starting node (0-0)
+        const startNode = this.nodes.find(n => n.id === '0-0');
+        
+        // Create movement points
+        const points = [
+            { x: this.game.config.width / 2, y: startY },
+            { x: startNode.position.x, y: startNode.position.y - 15 }  // -15 for penguin offset
+        ];
+        
+        // Move penguin to starting node
+        this.movePenguinAlongPath(points, () => {
+            this.currentNode = '0-0';
+            this.showStartConfirmation();
+        });
+    }
+
+    showStartConfirmation() {
+        // Create semi-transparent background
+        const bg = this.add.rectangle(
+            this.game.config.width / 2,
+            this.game.config.height / 2,
+            this.game.config.width,
+            this.game.config.height,
+            0x000000,
+            0.7
+        );
+
+        // Create confirmation dialog
+        const dialog = this.add.container(this.game.config.width / 2, this.game.config.height / 2);
+        
+        const box = this.add.rectangle(0, 0, 400, 200, 0x333333)
+            .setStrokeStyle(2, 0xffffff);
+        
+        const text = this.add.text(0, -40, 'Ready to begin your adventure?', {
+            fontSize: '24px',
+            fill: '#ffffff',
+            align: 'center'
+        }).setOrigin(0.5);
+        
+        const confirmButton = this.add.rectangle(0, 30, 200, 40, 0x44ff44)
+            .setInteractive()
+            .on('pointerdown', () => {
+                // Clean up dialog
+                bg.destroy();
+                dialog.destroy();
+                
+                // Update registry and start level
+                const gameMap = this.registry.get('gameMap');
+                this.registry.set('gameMap', {
+                    ...gameMap,
+                    currentNode: this.currentNode
+                });
+                
+                // Start the first level
+                this.scene.start('TestLevel', {
+                    nodeId: '0-0',
+                    nodeType: 'BATTLE'
+                });
+            });
+        
+        const confirmText = this.add.text(0, 30, 'Start', {
+            fontSize: '20px',
+            fill: '#ffffff'
+        }).setOrigin(0.5);
+        
+        dialog.add([box, text, confirmButton, confirmText]);
     }
 } 

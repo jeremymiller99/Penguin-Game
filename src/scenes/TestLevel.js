@@ -729,27 +729,29 @@ class TestLevel extends Phaser.Scene {
             const gameMap = this.registry.get('gameMap');
             
             if (gameMap) {
-                // Add current node to completed nodes if not already completed
-                if (!gameMap.completedNodes.includes(this.currentNodeId)) {
-                    gameMap.completedNodes.push(this.currentNodeId);
-                }
+                const completedNodes = new Set(gameMap.completedNodes);
+                const availableNodes = new Set();  // Start fresh with available nodes
+                
+                // Add current node to completed nodes
+                completedNodes.add(this.currentNodeId);
                 
                 // Find the current node
                 const currentNode = gameMap.nodes.find(n => n.id === this.currentNodeId);
                 if (currentNode) {
-                    // Make all connections available if they're not already completed
+                    // Make all unbeaten connected nodes available
                     currentNode.connections.forEach(nodeId => {
-                        if (!gameMap.completedNodes.includes(nodeId) && !gameMap.availableNodes.includes(nodeId)) {
-                            gameMap.availableNodes.push(nodeId);
+                        if (!completedNodes.has(nodeId)) {
+                            availableNodes.add(nodeId);
                         }
                     });
                 }
                 
-                // Update registry
+                // Update registry with new state
                 this.registry.set('gameMap', {
                     ...gameMap,
-                    completedNodes: [...gameMap.completedNodes],
-                    availableNodes: [...gameMap.availableNodes]
+                    currentNode: this.currentNodeId,  // Current node is the one just completed
+                    completedNodes: Array.from(completedNodes),
+                    availableNodes: Array.from(availableNodes)  // Only connected unbeaten nodes
                 });
             }
             
