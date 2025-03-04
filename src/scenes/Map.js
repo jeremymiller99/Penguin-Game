@@ -28,7 +28,8 @@ class Map extends Phaser.Scene {
                 BATTLE: { color: 0xff4444, sprite: 'enemySprite' },
                 ELITE: { color: 0xff8800, sprite: 'enemySprite' },
                 SHOP: { color: 0x44ff44, sprite: 'shop_empty' },
-                BOSS: { color: 0x9932CC, sprite: 'enemySprite' }
+                BOSS: { color: 0x9932CC, sprite: 'enemySprite' },
+                PERK: { color: 0x00aaff, sprite: 'default_perk_icon' }
             };
 
             this.createMap();
@@ -218,7 +219,7 @@ class Map extends Phaser.Scene {
     }
 
     getRandomNodeType() {
-        const types = ['BATTLE', 'BATTLE', 'BATTLE', 'ELITE', 'SHOP'];
+        const types = ['BATTLE', 'BATTLE', 'BATTLE', 'ELITE', 'SHOP', 'PERK'];
         return types[Math.floor(Math.random() * types.length)];
     }
 
@@ -284,6 +285,8 @@ class Map extends Phaser.Scene {
             let indicatorText;
             if (node.type === 'SHOP') {
                 indicatorText = '$';
+            } else if (node.type === 'PERK') {
+                indicatorText = 'P';
             } else {
                 // For battle, elite, and boss nodes, show difficulty rating
                 indicatorText = node.difficultyRating.toString();
@@ -355,8 +358,17 @@ class Map extends Phaser.Scene {
             enemyText = '\nBoss Fight';
         }
         
+        let typeText;
+        switch(node.type) {
+            case 'PERK':
+                typeText = 'Upgrade Station\nObtain a new ability';
+                break;
+            default:
+                typeText = node.type;
+        }
+        
         this.nodeInfo = this.add.text(node.position.x, node.position.y - 50, 
-            `${node.type}${enemyText}\nDifficulty: ${node.difficultyRating}/10\n${statusText}`, {
+            `${typeText}${enemyText}\nDifficulty: ${node.difficultyRating}/10\n${statusText}`, {
             fontSize: '16px',
             fill: '#ffffff',
             backgroundColor: '#000000',
@@ -412,11 +424,19 @@ class Map extends Phaser.Scene {
                         availableNodes: Array.from(this.availableNodes)
                     });
                     
-                    this.scene.start('TestLevel', { 
-                        nodeId: node.id, 
-                        nodeType: node.type,
-                        difficultyRating: node.difficultyRating
-                    });
+                    if (node.type === 'PERK') {
+                        this.scene.start('PerkRoom', {
+                            nodeId: node.id,
+                            nodeType: node.type,
+                            difficultyRating: node.difficultyRating
+                        });
+                    } else {
+                        this.scene.start('TestLevel', { 
+                            nodeId: node.id, 
+                            nodeType: node.type,
+                            difficultyRating: node.difficultyRating
+                        });
+                    }
                 } else {
                     // Just moving to a completed node
                     this.currentNode = node.id;

@@ -338,6 +338,42 @@ class TestLevel extends Phaser.Scene {
         slideCooldownBar.add(this.slideCooldownBg);
         slideCooldownBar.add(this.slideCooldownFill);
         hudContainer.add(slideCooldownBar);
+
+        // Initialize perk manager
+        this.perkManager = new PerkManager(this, this.penguin);
+        
+        // Initialize default game balance values
+        this.cashMultiplier = 1.0;
+        this.enemyHealthMultiplier = 1.0;
+        this.explosionSizeMultiplier = 1.0;
+        
+        // Apply any selected perk from the perk room
+        const gameState = this.registry.get('gameState') || {};
+        
+        // Apply previously acquired perks first
+        if (gameState.activePerks && gameState.activePerks.length > 0) {
+            gameState.activePerks.forEach(perkId => {
+                this.perkManager.addPerk(perkId);
+            });
+        }
+        
+        // Then apply any newly selected perk
+        if (gameState.selectedPerk) {
+            this.perkManager.addPerk(gameState.selectedPerk.id);
+            
+            // Add the selected perk to the active perks list
+            if (!gameState.activePerks) {
+                gameState.activePerks = [];
+            }
+            gameState.activePerks.push(gameState.selectedPerk.id);
+            
+            // Clear the selected perk so it's not applied again
+            delete gameState.selectedPerk;
+            this.registry.set('gameState', gameState);
+        }
+        
+        // Create perk UI
+        this.createPerkUI();
     }
 
     createMinimap(worldWidth, worldHeight) {
@@ -585,6 +621,11 @@ class TestLevel extends Phaser.Scene {
 
         // Update slide cooldown UI
         this.updateSlideCooldown();
+
+        // Update perks
+        if (this.perkManager) {
+            this.perkManager.update();
+        }
     }
 
     calculateVelocity() {
@@ -910,6 +951,12 @@ class TestLevel extends Phaser.Scene {
 
     handleBulletEnemyCollision(bullet, enemy) {
         bullet.destroy();
+        
+        // Check for explosive rounds perk
+        if (this.penguin.hasExplosiveRounds) {
+            this.createExplosion(bullet.x, bullet.y, 100); // Small explosion
+        }
+        
         enemy.takeDamage(10);
         
         // If enemy died, spawn cash
@@ -981,8 +1028,8 @@ class TestLevel extends Phaser.Scene {
         let spawnX, spawnY;
         
         while (!validPosition) {
-            spawnX = Phaser.Math.Between(100, this.game.config.width - 100);
-            spawnY = Phaser.Math.Between(100, this.game.config.height - 100);
+            spawnX = Phaser.Math.Between(100, this.physics.world.bounds.width - 100);
+            spawnY = Phaser.Math.Between(100, this.physics.world.bounds.height - 100);
             
             const distanceFromPlayer = Phaser.Math.Distance.Between(
                 spawnX, spawnY, this.penguin.x, this.penguin.y
@@ -1001,30 +1048,47 @@ class TestLevel extends Phaser.Scene {
             case 'melee':
                 enemy = new MeleeEnemy(this, spawnX, spawnY);
                 break;
+            case 'tank':
+                enemy = new TankEnemy(this, spawnX, spawnY);
+                break;
+            case 'bomber':
+                enemy = new BomberEnemy(this, spawnX, spawnY);
+                break;
             default:
                 enemy = new Enemy(this, spawnX, spawnY);
+                break;
         }
         
         this.enemies.add(enemy);
         this.physics.add.collider(enemy, this.penguin);
         
+        // Add collision between enemy and crates
+        this.physics.add.collider(enemy, this.crates);
+        
+        // Handle ranged enemy bullets
         if (enemy instanceof RangedEnemy && enemy.gun) {
             this.physics.add.collider(enemy.gun.bullets, this.penguin, (penguin, bullet) => {
                 bullet.destroy();
-                penguin.health -= enemy.attackDamage;
+                penguin.health -= enemy.damage;
                 this.sound.play('hit', {
                     volume: 0.4,
                     rate: 0.8 + Math.random() * 0.4
                 });
-    
+
                 // Apply visual feedback
                 penguin.setTint(0xff0000);
                 this.time.delayedCall(100, () => {
                     penguin.clearTint();
                 });
             });
+            
+            // Add collision between enemy bullets and crates
+            this.physics.add.collider(enemy.gun.bullets, this.crates, (bullet, crate) => {
+                bullet.destroy();
+                crate.takeDamage(enemy.damage / 2);
+            });
         }
-
+        
         return enemy;
     }
 
@@ -1079,7 +1143,7 @@ class TestLevel extends Phaser.Scene {
                 });
             }
             
-            this.scene.start('Map');
+            this.transitionToScene('Map');
         });
     }
 
@@ -1169,7 +1233,7 @@ class TestLevel extends Phaser.Scene {
 
         // Check if penguin is within blast radius
         const distToPenguin = Phaser.Math.Distance.Between(explosionX, explosionY, this.penguin.x, this.penguin.y);
-        if (distToPenguin < explosionRadius) {
+        if (distToPenguin < explosionRadius && !this.penguin.isExplosionImmune) {
             // Deal damage to penguin based on distance
             const damage = Math.floor(50 * (1 - distToPenguin/explosionRadius));
             if (this.penguin.health) {
@@ -1273,7 +1337,9 @@ class TestLevel extends Phaser.Scene {
         let enemyTypeDistribution = {
             default: 10,
             melee: 0,
-            ranged: 0
+            ranged: 0,
+            tank: 0,
+            bomber: 0
         };
         
         // More gradual introduction of melee enemies
@@ -1284,6 +1350,16 @@ class TestLevel extends Phaser.Scene {
         // More gradual introduction of ranged enemies
         if (floorLevel >= 6) {
             enemyTypeDistribution.ranged = Math.min((floorLevel - 5) * 0.8, 8);
+        }
+        
+        // Introduce tank enemies at higher levels
+        if (floorLevel >= 9) {
+            enemyTypeDistribution.tank = Math.min((floorLevel - 8) * 0.6, 6);
+        }
+        
+        // Introduce bomber enemies at higher levels
+        if (floorLevel >= 12) {
+            enemyTypeDistribution.bomber = Math.min((floorLevel - 11) * 0.7, 7);
         }
         
         // As floor level increases, gradually reduce basic enemies in favor of advanced types
@@ -1328,37 +1404,6 @@ class TestLevel extends Phaser.Scene {
         }
     }
 
-    // Comment out or remove the entire updateBackgroundMusic method since it's no longer needed
-    /*
-    updateBackgroundMusic() {
-        const hasEnemies = this.enemies.getChildren().length > 0;
-        const shouldPlayCombatMusic = hasEnemies;
-        
-        if (shouldPlayCombatMusic && this.musicNoEnemies.isPlaying || 
-            !shouldPlayCombatMusic && this.musicWithEnemies.isPlaying) {
-            
-            const currentMusic = shouldPlayCombatMusic ? this.musicNoEnemies : this.musicWithEnemies;
-            const newMusic = shouldPlayCombatMusic ? this.musicWithEnemies : this.musicNoEnemies;
-            
-            this.tweens.add({
-                targets: currentMusic,
-                volume: 0,
-                duration: 1000,
-                onComplete: () => {
-                    currentMusic.stop();
-                    newMusic.play({ loop: !shouldPlayCombatMusic });
-                    this.tweens.add({
-                        targets: newMusic,
-                        volume: 0.3,
-                        from: 0,
-                        duration: 1000
-                    });
-                }
-            });
-        }
-    }
-    */
-
     // Add this method to handle updating the slide cooldown UI
     updateSlideCooldown() {
         if (!this.slideCooldownFill) return;
@@ -1376,5 +1421,206 @@ class TestLevel extends Phaser.Scene {
             this.slideCooldownFill.width = 100;
             this.slideCooldownFill.fillColor = 0x3498db; // Blue when ready
         }
+    }
+
+    // Add method to create perk UI
+    createPerkUI() {
+        // Create a container for perk icons positioned under the health bar
+        // The health bar is at y position 30, so we'll position this at y=50
+        this.perkIconsContainer = this.add.container(30, 50);
+        this.perkIconsContainer.setScrollFactor(0);
+        
+        // Add a label
+        const perkLabel = this.add.text(0, 0, 'PERKS', {
+            fontSize: '14px',
+            fontFamily: 'Arial',
+            fill: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        this.perkIconsContainer.add(perkLabel);
+        
+        // Update the icons
+        this.updatePerkIcons([]);
+    }
+
+    // Method to update perk icons when perks change
+    updatePerkIcons(perks) {
+        // Clear existing icons
+        this.perkIconsContainer.removeAll(true);
+        
+        // Re-add the label
+        const perkLabel = this.add.text(0, 0, 'PERKS', {
+            fontSize: '14px',
+            fontFamily: 'Arial',
+            fill: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        this.perkIconsContainer.add(perkLabel);
+        
+        // Add each perk icon in a row under the label
+        const iconSize = 35; // Space between icons
+        const startY = 25;   // Y position under the label
+        
+        perks.forEach((perk, index) => {
+            const icon = this.add.sprite(index * iconSize, startY, perk.icon || 'default_perk_icon')
+                .setScale(1.5)
+                .setInteractive({ useHandCursor: true });
+            
+            // Add a colored border based on rarity
+            const border = this.add.graphics();
+            border.lineStyle(2, this.getRarityColor(perk.rarity), 1);
+            border.strokeCircle(index * iconSize, startY, 18);
+            
+            this.perkIconsContainer.add([border, icon]);
+            
+            // Add tooltip on hover
+            icon.on('pointerover', () => {
+                this.showPerkTooltip(perk, icon.x + this.perkIconsContainer.x, 
+                                     icon.y + this.perkIconsContainer.y + 25);
+            });
+            
+            icon.on('pointerout', () => {
+                if (this.perkTooltip) {
+                    this.perkTooltip.destroy();
+                    this.perkTooltip = null;
+                }
+            });
+        });
+    }
+
+    // Method to show a tooltip when hovering over a perk icon
+    showPerkTooltip(perk, x, y) {
+        if (this.perkTooltip) {
+            this.perkTooltip.destroy();
+        }
+        
+        this.perkTooltip = this.add.container(x, y);
+        this.perkTooltip.setScrollFactor(0);
+        
+        // Background
+        const bg = this.add.rectangle(0, 0, 200, 80, 0x000000, 0.8)
+            .setOrigin(0.5, 0);
+        this.perkTooltip.add(bg);
+        
+        // Name
+        const nameText = this.add.text(0, 5, perk.name, {
+            fontSize: '16px',
+            fontFamily: 'Arial',
+            fill: this.getRarityColor(perk.rarity, true),
+            stroke: '#000000',
+            strokeThickness: 2,
+            align: 'center'
+        }).setOrigin(0.5, 0);
+        this.perkTooltip.add(nameText);
+        
+        // Description
+        const descText = this.add.text(0, 30, perk.description, {
+            fontSize: '12px',
+            fontFamily: 'Arial',
+            fill: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 1,
+            align: 'center',
+            wordWrap: { width: 180 }
+        }).setOrigin(0.5, 0);
+        this.perkTooltip.add(descText);
+        
+        // Make sure tooltip stays within screen bounds
+        const bounds = this.perkTooltip.getBounds();
+        if (bounds.right > this.game.config.width) {
+            this.perkTooltip.x -= (bounds.right - this.game.config.width + 10);
+        }
+        if (bounds.bottom > this.game.config.height) {
+            this.perkTooltip.y -= (bounds.bottom - this.game.config.height + 10);
+        }
+        if (bounds.left < 0) {
+            this.perkTooltip.x -= bounds.left - 10;
+        }
+    }
+
+    getRarityColor(rarity, isText = false) {
+        const colors = {
+            common: isText ? '#aaaaaa' : 0xaaaaaa,
+            uncommon: isText ? '#00cc00' : 0x00cc00,
+            rare: isText ? '#0088ff' : 0x0088ff,
+            epic: isText ? '#aa44ff' : 0xaa44ff,
+            legendary: isText ? '#ffaa00' : 0xffaa00
+        };
+        
+        return colors[rarity] || (isText ? '#ffffff' : 0xffffff);
+    }
+
+    // Add an explosion method for explosive rounds
+    createExplosion(x, y, radius) {
+        // Adjust explosion size based on perk
+        const finalRadius = radius * (this.explosionSizeMultiplier || 1);
+        
+        // Create explosion effect
+        const explosion = this.add.circle(x, y, 5, 0xffff00, 1);
+        
+        // Expand and fade out
+        this.tweens.add({
+            targets: explosion,
+            radius: finalRadius,
+            alpha: 0,
+            duration: 300,
+            ease: 'Power2',
+            onComplete: () => explosion.destroy()
+        });
+        
+        // Deal damage to enemies in radius
+        this.enemies.getChildren().forEach(enemy => {
+            const distance = Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y);
+            if (distance <= finalRadius) {
+                const damage = Math.floor(5 * (1 - distance/finalRadius));
+                enemy.takeDamage(damage);
+            }
+        });
+        
+        // Deal damage to player if in radius and not immune
+        const distToPlayer = Phaser.Math.Distance.Between(x, y, this.penguin.x, this.penguin.y);
+        if (distToPlayer <= finalRadius && !this.penguin.isExplosionImmune) {
+            const damage = Math.floor(3 * (1 - distToPlayer/finalRadius));
+            this.penguin.health -= damage;
+            
+            // Flash player
+            this.penguin.setTint(0xff0000);
+            this.time.delayedCall(100, () => {
+                this.penguin.clearTint();
+            });
+        }
+        
+        // Add sound effect
+        this.sound.play('explosion', { 
+            volume: 0.4,
+            rate: 0.8 + Math.random() * 0.4
+        });
+    }
+
+    // Add this method to save game state when transitioning to another scene
+    saveGameState() {
+        // Get current game state or initialize a new one
+        const gameState = this.registry.get('gameState') || {};
+        
+        // Save active perks
+        if (this.perkManager) {
+            gameState.activePerks = this.perkManager.activePerks.map(perk => perk.id);
+        }
+        
+        // Save other important game state
+        gameState.playerCurrency = this.playerCurrency;
+        gameState.playerScore = this.playerScore;
+        
+        // Update the registry
+        this.registry.set('gameState', gameState);
+        console.log("Game state saved:", gameState);
+    }
+    
+    // Call this method before transitioning to another scene
+    transitionToScene(sceneName, data = {}) {
+        this.saveGameState();
+        this.scene.start(sceneName, data);
     }
 }

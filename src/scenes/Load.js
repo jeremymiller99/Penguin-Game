@@ -15,6 +15,13 @@ class Load extends Phaser.Scene {
         this.load.image('icn_cash', './assets/icons/icn_cash.png');
         this.load.image('icn_fish', './assets/icons/icn_fish.png');
         this.load.spritesheet('enemySprite', './assets/hazmat_guy.png', { frameWidth: 16, frameHeight: 16 });
+        
+        // Load enemy spritesheet with more frames for new enemy types
+        this.load.spritesheet('enemy', './assets/hazmat_guy.png', { frameWidth: 16, frameHeight: 16 });
+        
+        // Create a spark texture for melee enemy
+        const sparkGraphics = this.add.graphics();
+        sparkGraphics.fillStyle(0xFFFFFF).fillCircle(0, 0, 3).generateTexture('sparkTexture', 6, 6).destroy();
 
         const bulletGraphics = this.add.graphics();
         bulletGraphics.fillStyle(0xFFFFFF).fillRect(0, 0, 4, 2).generateTexture('bullet', 4, 2).destroy();
@@ -49,6 +56,8 @@ class Load extends Phaser.Scene {
         this.load.audio('penguin_fall', './assets/sfx/penguin_fall.wav');
         this.load.audio('plane', './assets/sfx/plane.wav');
         this.load.audio('slide', './assets/sfx/slide.wav');
+        this.load.audio('enemyHit', './assets/sfx/hitHurt.wav');
+        this.load.audio('dodge', './assets/sfx/slide.wav');
 
         this.load.audio('main_menu', './assets/sfx/menu.wav');
         this.load.audio('briefing', './assets/sfx/briefing.wav');
@@ -60,6 +69,19 @@ class Load extends Phaser.Scene {
         this.load.image('cs_water', './assets/cutscene/water_2.png');
         this.load.image('cs_mountain_bg', './assets/cutscene/mountain_bg.png');
         this.load.image('cs_plane', './assets/cutscene/plane.png');
+
+        // Perk icons
+        this.load.image('default_perk_icon', 'assets/images/perks/default_perk.png');
+        this.load.image('perk_rapid_fire', 'assets/images/perks/rapid_fire.png');
+        this.load.image('perk_heavy_bullets', 'assets/images/perks/heavy_bullets.png');
+        this.load.image('perk_explosive_rounds', 'assets/images/perks/explosive_rounds.png');
+        this.load.image('perk_quick_slide', 'assets/images/perks/quick_slide.png');
+        this.load.image('perk_speed_boost', 'assets/images/perks/speed_boost.png');
+        this.load.image('perk_vitality', 'assets/images/perks/vitality.png');
+        this.load.image('perk_vampirism', 'assets/images/perks/vampirism.png');
+        this.load.image('perk_double_cash', 'assets/images/perks/double_cash.png');
+        this.load.image('perk_barrel_master', 'assets/images/perks/barrel_master.png');
+        this.load.image('perk_enemy_weakener', 'assets/images/perks/enemy_weakener.png');
     }
 
     create() {
@@ -74,16 +96,24 @@ class Load extends Phaser.Scene {
         // Create animations for the enemy
         this.anims.create({
             key: 'enemy_walk',
-            frames: this.anims.generateFrameNumbers('enemySprite', { start: 0, end: 3 }),
+            frames: this.anims.generateFrameNumbers('enemy', { start: 0, end: 3 }),
             frameRate: 8,
             repeat: -1
         });
 
         this.anims.create({
             key: 'enemy_idle',
-            frames: this.anims.generateFrameNumbers('enemySprite', { start: 4, end: 5 }),
+            frames: this.anims.generateFrameNumbers('enemy', { start: 4, end: 5 }),
             frameRate: 8,
             repeat: -1
+        });
+        
+        // Create muzzle flash animation
+        this.anims.create({
+            key: 'muzzleFlash',
+            frames: this.anims.generateFrameNumbers('muzzleFlash', { start: 0, end: 0 }),
+            frameRate: 15,
+            repeat: 0
         });
 
         this.scene.start('Menu');
