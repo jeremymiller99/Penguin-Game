@@ -30,6 +30,7 @@ class Load extends Phaser.Scene {
         this.load.tilemapTiledJSON('test_map', './assets/test_map.json');
         this.load.tilemapTiledJSON('test_map_1', './assets/test_map_1.json');
         this.load.tilemapTiledJSON('test_map_2', './assets/test_map_2.json');
+        this.load.tilemapTiledJSON('test_map_3', './assets/test_map_3.json');
         
         // Add a load error handler to debug any loading issues
         this.load.on('loaderror', (fileObj) => {
@@ -47,6 +48,7 @@ class Load extends Phaser.Scene {
         this.load.audio('music_no_enemies', './assets/sfx/music_no_enemies.wav');
         this.load.audio('penguin_fall', './assets/sfx/penguin_fall.wav');
         this.load.audio('plane', './assets/sfx/plane.wav');
+        this.load.audio('slide', './assets/sfx/slide.wav');
 
         this.load.audio('main_menu', './assets/sfx/menu.wav');
         this.load.audio('briefing', './assets/sfx/briefing.wav');

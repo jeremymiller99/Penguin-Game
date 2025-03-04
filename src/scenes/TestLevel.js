@@ -14,13 +14,29 @@ class TestLevel extends Phaser.Scene {
     init(data) {
         this.currentNodeId = data.nodeId;
         this.nodeType = data.nodeType;
+        this.difficultyRating = data.difficultyRating || 1; // Default to 1 if not provided
+        
+        // Create a smoother difficulty curve with more gradual progression
+        // Instead of jumps of 10 floors per difficulty rating
+        this.floorLevel = Math.ceil(Math.pow(this.difficultyRating, 1.7) + this.difficultyRating);
+        
+        // Adjust floor level based on node type (more subtle adjustments)
+        if (this.nodeType === 'ELITE') {
+            this.floorLevel = Math.ceil(this.floorLevel * 1.3); // 30% increase instead of flat +5
+        } else if (this.nodeType === 'BOSS') {
+            this.floorLevel = Math.ceil(this.floorLevel * 1.5); // 50% increase instead of flat +10
+        } else if (this.nodeType === 'SHOP') {
+            this.floorLevel = Math.max(1, Math.floor(this.floorLevel * 0.8)); // 20% decrease for shops
+        }
+        
+        console.log(`Node type: ${this.nodeType}, Difficulty: ${this.difficultyRating}, Floor Level: ${this.floorLevel}`);
     }
 
     create() {
         this.cameras.main.setBackgroundColor('#87CEEB');
 
         // Randomly choose between test_map and test_map_1
-        const mapKeys = ['test_map', 'test_map_1', 'test_map_2'];
+        const mapKeys = ['test_map_3', 'test_map_1', 'test_map_2'];
         const randomMapKey = mapKeys[Math.floor(Math.random() * mapKeys.length)];
         console.log('Selected map:', randomMapKey);
 
@@ -79,7 +95,8 @@ class TestLevel extends Phaser.Scene {
             left: Phaser.Input.Keyboard.KeyCodes.A,
             right: Phaser.Input.Keyboard.KeyCodes.D,
             pickup: Phaser.Input.Keyboard.KeyCodes.E,
-            reload: Phaser.Input.Keyboard.KeyCodes.R
+            reload: Phaser.Input.Keyboard.KeyCodes.R,
+            slide: Phaser.Input.Keyboard.KeyCodes.SPACE // Change from SHIFT to SPACE
         });
 
         
@@ -226,7 +243,7 @@ class TestLevel extends Phaser.Scene {
         hudContainer.add(floorIcon);
 
         xPos += 20;
-        this.floorLevelText = this.add.text(xPos, yPos - 15, 'Floor ' + this.floorLevel, {
+        this.floorLevelText = this.add.text(xPos, yPos - 15, `Difficulty: ${this.difficultyRating}/10`, {
             fontSize: '28px',
             fontFamily: 'Arial Black',
             fontWeight: 'bold',
@@ -294,6 +311,33 @@ class TestLevel extends Phaser.Scene {
 
         // Create the minimap after setting up the world
         this.createMinimap(worldWidth, worldHeight);
+
+        // Initialize slide properties
+        this.slideLastUsed = 0;
+        this.slideCooldown = 800; // 0.8 second cooldown to match the change in PenguinStateMachine
+
+        // Add these to the UI section to show cooldown
+        // After creating all your other UI elements:
+        const slideCooldownBar = this.add.container(20, this.game.config.height - 40);
+        slideCooldownBar.setScrollFactor(0);
+
+        const slideCooldownLabel = this.add.text(0, 0, "SLIDE", {
+            fontSize: '16px',
+            fontFamily: 'Arial Black',
+            fill: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        slideCooldownBar.add(slideCooldownLabel);
+
+        this.slideCooldownBg = this.add.rectangle(40, 10, 100, 10, 0x333333);
+        this.slideCooldownFill = this.add.rectangle(40, 10, 100, 10, 0x3498db);
+        this.slideCooldownFill.setOrigin(0, 0.5);
+        this.slideCooldownBg.setOrigin(0, 0.5);
+
+        slideCooldownBar.add(this.slideCooldownBg);
+        slideCooldownBar.add(this.slideCooldownFill);
+        hudContainer.add(slideCooldownBar);
     }
 
     createMinimap(worldWidth, worldHeight) {
@@ -538,6 +582,9 @@ class TestLevel extends Phaser.Scene {
         if (this.penguin.health <= 0) {
             this.checkPenguinDeath();
         }
+
+        // Update slide cooldown UI
+        this.updateSlideCooldown();
     }
 
     calculateVelocity() {
@@ -885,20 +932,32 @@ class TestLevel extends Phaser.Scene {
         // Add collision between enemy bullets and player
         if (enemy instanceof RangedEnemy && enemy.gun) {
             this.physics.add.collider(enemy.gun.bullets, this.penguin, (penguin, bullet) => {
-                bullet.destroy();
-                penguin.health -= enemy.attackDamage;
-                
-                // Play sound effect
-                this.sound.play('hit', {
-                    volume: 0.4,
-                    rate: 0.8 + Math.random() * 0.4
-                });
+                // Check for invulnerability
+                if (!penguin.isInvulnerable) {
+                    bullet.destroy();
+                    penguin.health -= enemy.attackDamage;
+                    
+                    // Play sound effect
+                    this.sound.play('hit', {
+                        volume: 0.4,
+                        rate: 0.8 + Math.random() * 0.4
+                    });
 
-                // Apply visual feedback
-                penguin.setTint(0xff0000);
-                this.time.delayedCall(100, () => {
-                    penguin.clearTint();
-                });
+                    // Apply visual feedback
+                    penguin.setTint(0xff0000);
+                    this.time.delayedCall(100, () => {
+                        penguin.clearTint();
+                    });
+                } else {
+                    // Still destroy the bullet but no damage
+                    bullet.destroy();
+                    
+                    // Play a "dodge" sound effect
+                    this.sound.play('dodge', {
+                        volume: 0.3,
+                        rate: 1.2
+                    });
+                }
             });
         }
     }
@@ -1194,34 +1253,42 @@ class TestLevel extends Phaser.Scene {
     }
 
     calculateDifficultyParams(floorLevel) {
-        // Base values for floor 1
-        const baseEnemies = 2;
+        // Base values adjustments for more gradual scaling
+        const baseEnemies = 1;
         const baseCrates = 1;
         
-        // Calculate scaled values based on floor level
-        const enemyCount = Math.min(Math.floor(baseEnemies + (floorLevel * 0.5)), 50); // max 50 enemies
-        const crateCount = Math.min(Math.floor(baseCrates + (floorLevel * 0.3)), 5); // Max 5 crates
+        // More gradual enemy scaling with diminishing returns at higher levels
+        const enemyCount = Math.min(
+            Math.floor(baseEnemies + Math.sqrt(floorLevel) * 1.2), 
+            50
+        );
         
-        // Calculate enemy type distribution
-        // Higher floors have more challenging enemies
+        // More gradual crate scaling
+        const crateCount = Math.min(
+            Math.floor(baseCrates + Math.log(floorLevel + 1) * 1.2), 
+            5
+        );
+        
+        // Calculate enemy type distribution with smoother transitions
         let enemyTypeDistribution = {
-            default: 1,
+            default: 10,
             melee: 0,
             ranged: 0
         };
         
+        // More gradual introduction of melee enemies
         if (floorLevel >= 3) {
-            enemyTypeDistribution.melee = 1;
-        }
-        if (floorLevel >= 5) {
-            enemyTypeDistribution.ranged = 1;
+            enemyTypeDistribution.melee = Math.min(floorLevel - 2, 8);
         }
         
-        // Adjust probabilities based on floor level
-        if (floorLevel >= 7) {
-            enemyTypeDistribution.default *= 0.5;
-            enemyTypeDistribution.melee *= 1.5;
-            enemyTypeDistribution.ranged *= 2;
+        // More gradual introduction of ranged enemies
+        if (floorLevel >= 6) {
+            enemyTypeDistribution.ranged = Math.min((floorLevel - 5) * 0.8, 8);
+        }
+        
+        // As floor level increases, gradually reduce basic enemies in favor of advanced types
+        if (floorLevel >= 8) {
+            enemyTypeDistribution.default = Math.max(10 - (floorLevel - 7), 1);
         }
         
         return {
@@ -1291,4 +1358,23 @@ class TestLevel extends Phaser.Scene {
         }
     }
     */
+
+    // Add this method to handle updating the slide cooldown UI
+    updateSlideCooldown() {
+        if (!this.slideCooldownFill) return;
+        
+        const now = this.time.now;
+        const elapsed = now - this.slideLastUsed;
+        
+        if (elapsed < this.slideCooldown) {
+            // Cooldown not ready yet
+            const progress = elapsed / this.slideCooldown;
+            this.slideCooldownFill.width = progress * 100;
+            this.slideCooldownFill.fillColor = 0x95a5a6; // Gray while on cooldown
+        } else {
+            // Cooldown ready
+            this.slideCooldownFill.width = 100;
+            this.slideCooldownFill.fillColor = 0x3498db; // Blue when ready
+        }
+    }
 }

@@ -73,6 +73,7 @@ class Map extends Phaser.Scene {
         const startNode = {
             id: '0-0',
             type: 'BATTLE',
+            difficultyRating: 1, // Starting difficulty
             position: {
                 x: this.game.config.width / 2,
                 y: spacing.y
@@ -111,10 +112,21 @@ class Map extends Phaser.Scene {
                 const baseX = selectedPaths[i];
                 const xVariance = level <= 2 ? 30 : 60; // Less variance in first two levels
                 const x = baseX + Phaser.Math.Between(-xVariance, xVariance);
+                
+                // Calculate difficulty rating based on level and node type
+                let difficultyRating = Math.min(10, Math.ceil(level * 1.5));
+                
+                // Adjust difficulty based on node type
+                if (nodeType === 'ELITE') {
+                    difficultyRating = Math.min(10, difficultyRating + 2); // Elite nodes are harder
+                } else if (nodeType === 'SHOP') {
+                    difficultyRating = Math.max(1, difficultyRating - 1); // Shop nodes are easier
+                }
 
                 const node = {
                     id: `${level}-${i}`,
                     type: nodeType,
+                    difficultyRating: difficultyRating,
                     position: {
                         x: x,
                         y: spacing.y * (level + 1)
@@ -130,6 +142,7 @@ class Map extends Phaser.Scene {
         const bossNode = {
             id: `${levels-1}-0`,
             type: 'BOSS',
+            difficultyRating: 10, // Boss is always maximum difficulty
             position: {
                 x: this.game.config.width / 2,
                 y: spacing.y * levels
@@ -267,28 +280,83 @@ class Map extends Phaser.Scene {
             // Add border
             nodeSprite.setStrokeStyle(2, 0xffffff);
             
+            // Add indicator text based on node type
+            let indicatorText;
+            if (node.type === 'SHOP') {
+                indicatorText = '$';
+            } else {
+                // For battle, elite, and boss nodes, show difficulty rating
+                indicatorText = node.difficultyRating.toString();
+            }
+            
+            // Create the text object
+            node.indicator = this.add.text(
+                node.position.x, 
+                node.position.y, 
+                indicatorText, 
+                { 
+                    fontSize: '24px',
+                    fontFamily: 'Arial',
+                    fontWeight: 'bold',
+                    color: '#ffffff',
+                    stroke: '#000000',
+                    strokeThickness: 3
+                }
+            ).setOrigin(0.5);
+            
             // Store sprite reference in node object
             node.sprite = nodeSprite;
 
-            // Add hover effect
+            // Add hover effect for ALL nodes, regardless of availability
             nodeSprite.setInteractive();
             nodeSprite.on('pointerover', () => {
-                nodeSprite.setScale(1.2);
+                nodeSprite.setScale(1.1);
+                node.indicator.setScale(1.1);
                 this.showNodeInfo(node);
             });
 
             nodeSprite.on('pointerout', () => {
                 nodeSprite.setScale(1);
+                node.indicator.setScale(1);
                 this.hideNodeInfo();
             });
         });
     }
 
-    showNodeInfo(node) {
+    showNodeInfo(node, isCompleted) {
         if (this.nodeInfo) this.nodeInfo.destroy();
         
-        this.nodeInfo = this.add.text(node.position.x, node.position.y - 40, 
-            `${node.type}\nLevel ${node.id.split('-')[0]}`, {
+        // Check completion status if not provided
+        if (isCompleted === undefined) {
+            isCompleted = this.completedNodes.has(node.id);
+        }
+        
+        // Get node state to determine availability
+        const state = this.getNodeState(node);
+        const isAvailable = state === NodeState.AVAILABLE_ACTIVE || state === NodeState.AVAILABLE_COMPLETED;
+        
+        // Build status text based on node state
+        let statusText;
+        if (isCompleted) {
+            statusText = '(Completed)';
+        } else if (isAvailable) {
+            statusText = '(Available)';
+        } else {
+            statusText = '(Locked)';
+        }
+        
+        // Enhanced node info to help with route planning
+        let enemyText = '';
+        if (node.type === 'BATTLE') {
+            enemyText = '\nRegular Enemies';
+        } else if (node.type === 'ELITE') {
+            enemyText = '\nStronger Enemies';
+        } else if (node.type === 'BOSS') {
+            enemyText = '\nBoss Fight';
+        }
+        
+        this.nodeInfo = this.add.text(node.position.x, node.position.y - 50, 
+            `${node.type}${enemyText}\nDifficulty: ${node.difficultyRating}/10\n${statusText}`, {
             fontSize: '16px',
             fill: '#ffffff',
             backgroundColor: '#000000',
@@ -346,7 +414,8 @@ class Map extends Phaser.Scene {
                     
                     this.scene.start('TestLevel', { 
                         nodeId: node.id, 
-                        nodeType: node.type 
+                        nodeType: node.type,
+                        difficultyRating: node.difficultyRating
                     });
                 } else {
                     // Just moving to a completed node
@@ -404,6 +473,12 @@ class Map extends Phaser.Scene {
             ease: 'Linear',
             onComplete: () => {
                 this.penguinMarker.play('idle');
+                // Make sure indicator texts remain on top after penguin movement
+                this.nodes.forEach(node => {
+                    if (node.indicator) {
+                        node.indicator.setDepth(1);
+                    }
+                });
                 onComplete();
             }
         });
@@ -509,62 +584,51 @@ class Map extends Phaser.Scene {
                 // All completed nodes get checkmark
                 node.checkmark = this.add.text(
                     node.position.x, 
-                    node.position.y, 
+                    node.position.y + 20, // Position below the indicator text
                     '✓', 
                     { 
-                        fontSize: '24px',
+                        fontSize: '18px',
                         color: '#ffffff'
                     }
                 ).setOrigin(0.5);
+                
+                // Update indicator text appearance for completed nodes
+                if (node.indicator) {
+                    node.indicator.setAlpha(0.8);
+                }
             } else {
                 // Non-completed nodes
                 node.sprite
                     .setFillStyle(state === NodeState.AVAILABLE_ACTIVE ? 
                         this.nodeTypes[node.type].color : 0x666666)
                     .setAlpha(state === NodeState.AVAILABLE_ACTIVE ? 1 : 0.5);
+                    
+                // Update indicator text appearance for non-completed nodes
+                if (node.indicator) {
+                    node.indicator.setAlpha(state === NodeState.AVAILABLE_ACTIVE ? 1 : 0.5);
+                }
             }
 
-            // Interactivity
+            // ONLY set click functionality for available nodes
+            // But keep hover functionality for ALL nodes
             if (state === NodeState.AVAILABLE_ACTIVE || state === NodeState.AVAILABLE_COMPLETED) {
-                node.sprite
-                    .setInteractive()
-                    .on('pointerdown', () => this.handleNodeClick(node));
-                
-                // Add hover effects
-                node.sprite.on('pointerover', () => {
-                    node.sprite.setScale(1.2);
-                    this.showNodeInfo(node, isCompleted);
-                });
-                
-                node.sprite.on('pointerout', () => {
-                    node.sprite.setScale(1);
-                    this.hideNodeInfo();
-                });
+                node.sprite.on('pointerdown', () => this.handleNodeClick(node));
             } else {
-                node.sprite.disableInteractive();
+                // Remove any existing click listeners but keep hover
+                node.sprite.off('pointerdown');
             }
+            
+            // Make the cursor change to a pointer only for clickable nodes
+            node.sprite.on('pointerover', () => {
+                if (state === NodeState.AVAILABLE_ACTIVE || state === NodeState.AVAILABLE_COMPLETED) {
+                    this.game.canvas.style.cursor = 'pointer';
+                }
+            });
+            
+            node.sprite.on('pointerout', () => {
+                this.game.canvas.style.cursor = 'default';
+            });
         });
-    }
-
-    showNodeInfo(node, isCompleted) {
-        if (this.nodeInfo) this.nodeInfo.destroy();
-        
-        let statusText;
-        if (isCompleted) {
-            statusText = '(Completed)';
-        } else {
-            const state = this.getNodeState(node);
-            statusText = state === NodeState.AVAILABLE_ACTIVE ? '(Available)' : '(Locked)';
-        }
-        
-        this.nodeInfo = this.add.text(node.position.x, node.position.y - 40, 
-            `${node.type}\n${statusText}`, {
-            fontSize: '16px',
-            fill: '#ffffff',
-            backgroundColor: '#000000',
-            padding: { x: 5, y: 5 },
-            align: 'center'
-        }).setOrigin(0.5);
     }
 
     startFTUESequence() {
@@ -633,7 +697,8 @@ class Map extends Phaser.Scene {
             // Start the first level
             this.scene.start('TestLevel', {
                 nodeId: '0-0',
-                nodeType: 'BATTLE'
+                nodeType: 'BATTLE',
+                difficultyRating: 1
             });
         });
     }
