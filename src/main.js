@@ -6,8 +6,8 @@
 let config = {
     parent: 'game-canvas',
     type: Phaser.WEBGL,
-    width: 960,
-    height: 512,
+    width: 1280,
+    height: 720,
     pixelArt: true,
     physics: {
         default: 'arcade',

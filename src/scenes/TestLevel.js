@@ -19,8 +19,13 @@ class TestLevel extends Phaser.Scene {
     create() {
         this.cameras.main.setBackgroundColor('#87CEEB');
 
-        // Create the tilemap using the loaded JSON
-        const map = this.make.tilemap({ key: 'test_map' });
+        // Randomly choose between test_map and test_map_1
+        const mapKeys = ['test_map', 'test_map_1', 'test_map_2'];
+        const randomMapKey = mapKeys[Math.floor(Math.random() * mapKeys.length)];
+        console.log('Selected map:', randomMapKey);
+
+        // Create the tilemap using the randomly selected map
+        const map = this.make.tilemap({ key: randomMapKey });
         console.log('Map created:', map);
 
         // Add the tileset image to the map
@@ -30,10 +35,14 @@ class TestLevel extends Phaser.Scene {
         // Create the background layer
         const backgroundLayer = map.createLayer('Tile Layer 1', tileset, 0, 0);
         backgroundLayer.setScale(2);
-
-        // Set world bounds to match game config
-        this.physics.world.setBounds(0, 0, this.game.config.width, this.game.config.height);
-
+        
+        // Calculate the actual world size based on the map dimensions and scale
+        const worldWidth = map.widthInPixels * 2; // multiply by the scale (2)
+        const worldHeight = map.heightInPixels * 2; // multiply by the scale (2)
+        
+        // Set world bounds to match the map size, not just screen size
+        this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
+        
         // Initialize groups first
         this.enemies = this.physics.add.group();
         this.crates = this.physics.add.group({
@@ -57,6 +66,11 @@ class TestLevel extends Phaser.Scene {
         // Enable physics on the penguin sprite and make it a dynamic body
         this.physics.add.existing(this.penguin, false); // false = dynamic body
         this.penguin.body.setCollideWorldBounds(true);
+        
+        // Configure camera to follow the player with smooth movement
+        this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
+        this.cameras.main.startFollow(this.penguin, true, 0.09, 0.09); // smooth follow with lerp factor
+        this.cameras.main.setZoom(1); // adjust zoom if needed
 
         // Define keyboard keys for player input
         this.keys = this.input.keyboard.addKeys({
@@ -147,9 +161,12 @@ class TestLevel extends Phaser.Scene {
 
         // UI ------------------------------------------------------------------------------------------------
 
-        // Create HUD container along the top of the screen
+        // Create a container for the HUD elements
         const hudContainer = this.add.container(10, 10);
-
+        
+        // Set the HUD container to be fixed to the camera (not affected by camera movement)
+        hudContainer.setScrollFactor(0);
+        
         // Starting x position
         let xPos = 20;
         const yPos = 30;
@@ -274,6 +291,224 @@ class TestLevel extends Phaser.Scene {
         });
 
         this.penguin.stateMachine = new PenguinStateMachine(this.penguin);
+
+        // Create the minimap after setting up the world
+        this.createMinimap(worldWidth, worldHeight);
+    }
+
+    createMinimap(worldWidth, worldHeight) {
+        // Simple minimap configuration
+        const minimapWidth = 160;
+        const minimapHeight = 120;
+        const minimapX = this.game.config.width - minimapWidth - 20;
+        const minimapY = 20;
+        const minimapScale = Math.min(minimapWidth / worldWidth, minimapHeight / worldHeight);
+        
+        // Create a container for the minimap elements
+        this.minimapContainer = this.add.container(minimapX, minimapY);
+        this.minimapContainer.setScrollFactor(0); // Fix to camera
+        
+        // Simple background with border
+        const background = this.add.rectangle(
+            minimapWidth/2, 
+            minimapHeight/2, 
+            minimapWidth, 
+            minimapHeight, 
+            0x000000, 
+            0.5
+        );
+        background.setStrokeStyle(2, 0xffffff, 0.8);
+        this.minimapContainer.add(background);
+        
+        // Create room silhouette as a translucent shape
+        const roomOutline = this.add.rectangle(
+            minimapWidth/2, 
+            minimapHeight/2, 
+            worldWidth * minimapScale, 
+            worldHeight * minimapScale, 
+            0x333333, 
+            0.3
+        );
+        roomOutline.setStrokeStyle(1, 0x888888, 0.5);
+        this.minimapContainer.add(roomOutline);
+        
+        // Create player marker (white dot)
+        this.playerMarker = this.add.circle(minimapWidth/2, minimapHeight/2, 3, 0xffffff, 1);
+        this.minimapContainer.add(this.playerMarker);
+        
+        // Create collections for entity markers
+        this.enemyMarkers = [];
+        this.cashMarkers = [];
+        this.crateMarkers = []; // Add array for crate markers
+        this.ladderMarker = null;
+        
+        // Add simple label
+        const minimapLabel = this.add.text(minimapWidth/2, -5, "MAP", {
+            fontFamily: 'Arial',
+            fontSize: '12px',
+            color: '#ffffff'
+        }).setOrigin(0.5, 0.5);
+        this.minimapContainer.add(minimapLabel);
+        
+        // Store minimap properties for update
+        this.minimap = {
+            width: minimapWidth,
+            height: minimapHeight,
+            scale: minimapScale,
+            worldWidth: worldWidth,
+            worldHeight: worldHeight,
+            centerX: minimapWidth/2,
+            centerY: minimapHeight/2
+        };
+    }
+
+    updateMinimap() {
+        if (!this.playerMarker || !this.minimap) return;
+        
+        // Calculate player position on minimap
+        const playerX = this.minimap.centerX + ((this.penguin.x / this.physics.world.bounds.width) - 0.5) * (this.minimap.width * 0.9);
+        const playerY = this.minimap.centerY + ((this.penguin.y / this.physics.world.bounds.height) - 0.5) * (this.minimap.height * 0.9);
+        
+        // Update player marker position
+        this.playerMarker.setPosition(playerX, playerY);
+        
+        // Update entity markers
+        this.updateEnemyMarkers();
+        this.updateCashMarkers();
+        this.updateCrateMarkers(); // Add crate marker updates
+        this.updateLadderMarker();
+    }
+
+    updateEnemyMarkers() {
+        const enemies = this.enemies.getChildren();
+        
+        // Remove excess markers
+        while (this.enemyMarkers.length > enemies.length) {
+            const marker = this.enemyMarkers.pop();
+            marker.destroy();
+        }
+        
+        // Add new markers if needed
+        while (this.enemyMarkers.length < enemies.length) {
+            const marker = this.add.circle(0, 0, 2, 0xff0000, 1);
+            this.minimapContainer.add(marker);
+            this.enemyMarkers.push(marker);
+        }
+        
+        // Update positions
+        for (let i = 0; i < enemies.length; i++) {
+            const enemy = enemies[i];
+            const marker = this.enemyMarkers[i];
+            
+            // Skip inactive enemies
+            if (!enemy.active || !enemy.body) {
+                marker.setVisible(false);
+                continue;
+            }
+            
+            marker.setVisible(true);
+            
+            // Calculate position on minimap
+            const x = this.minimap.centerX + ((enemy.x / this.physics.world.bounds.width) - 0.5) * (this.minimap.width * 0.9);
+            const y = this.minimap.centerY + ((enemy.y / this.physics.world.bounds.height) - 0.5) * (this.minimap.height * 0.9);
+            
+            marker.setPosition(x, y);
+        }
+    }
+
+    updateCashMarkers() {
+        if (!this.cash) return;
+        
+        const cashItems = this.cash.getChildren();
+        
+        // Remove excess markers
+        while (this.cashMarkers.length > cashItems.length) {
+            const marker = this.cashMarkers.pop();
+            marker.destroy();
+        }
+        
+        // Add new markers if needed
+        while (this.cashMarkers.length < cashItems.length) {
+            const marker = this.add.circle(0, 0, 2, 0x00ff00, 1);
+            this.minimapContainer.add(marker);
+            this.cashMarkers.push(marker);
+        }
+        
+        // Update positions
+        for (let i = 0; i < cashItems.length; i++) {
+            const cash = cashItems[i];
+            const marker = this.cashMarkers[i];
+            
+            // Skip inactive cash
+            if (!cash.active || !cash.body) {
+                marker.setVisible(false);
+                continue;
+            }
+            
+            marker.setVisible(true);
+            
+            // Calculate position on minimap
+            const x = this.minimap.centerX + ((cash.x / this.physics.world.bounds.width) - 0.5) * (this.minimap.width * 0.9);
+            const y = this.minimap.centerY + ((cash.y / this.physics.world.bounds.height) - 0.5) * (this.minimap.height * 0.9);
+            
+            marker.setPosition(x, y);
+        }
+    }
+
+    updateCrateMarkers() {
+        if (!this.crates) return;
+        
+        const crates = this.crates.getChildren();
+        
+        // Remove excess markers
+        while (this.crateMarkers.length > crates.length) {
+            const marker = this.crateMarkers.pop();
+            marker.destroy();
+        }
+        
+        // Add new markers if needed
+        while (this.crateMarkers.length < crates.length) {
+            const marker = this.add.circle(0, 0, 2, 0xFFA500, 1); // Orange color for crates
+            this.minimapContainer.add(marker);
+            this.crateMarkers.push(marker);
+        }
+        
+        // Update positions
+        for (let i = 0; i < crates.length; i++) {
+            const crate = crates[i];
+            const marker = this.crateMarkers[i];
+            
+            // Skip inactive crates
+            if (!crate.active || !crate.body) {
+                marker.setVisible(false);
+                continue;
+            }
+            
+            marker.setVisible(true);
+            
+            // Calculate position on minimap
+            const x = this.minimap.centerX + ((crate.x / this.physics.world.bounds.width) - 0.5) * (this.minimap.width * 0.9);
+            const y = this.minimap.centerY + ((crate.y / this.physics.world.bounds.height) - 0.5) * (this.minimap.height * 0.9);
+            
+            marker.setPosition(x, y);
+        }
+    }
+
+    updateLadderMarker() {
+        // Create ladder marker if it exists in the game but not on the minimap
+        if (this.ladder && !this.ladderMarker) {
+            this.ladderMarker = this.add.circle(0, 0, 3, 0x8B4513, 1); // Brown color
+            this.minimapContainer.add(this.ladderMarker);
+        }
+        
+        // Update ladder position if it exists
+        if (this.ladder && this.ladderMarker) {
+            // Calculate position on minimap
+            const x = this.minimap.centerX + ((this.ladder.x / this.physics.world.bounds.width) - 0.5) * (this.minimap.width * 0.9);
+            const y = this.minimap.centerY + ((this.ladder.y / this.physics.world.bounds.height) - 0.5) * (this.minimap.height * 0.9);
+            
+            this.ladderMarker.setPosition(x, y);
+        }
     }
 
     update() {
@@ -295,6 +530,14 @@ class TestLevel extends Phaser.Scene {
         // Update health bars
         const playerHealthPercent = this.penguin.health / this.penguin.maxHealth;
         this.playerHealthBar.foreground.width = 160 * playerHealthPercent;
+        
+        // Update minimap player position
+        this.updateMinimap();
+        
+        // Check for player death
+        if (this.penguin.health <= 0) {
+            this.checkPenguinDeath();
+        }
     }
 
     calculateVelocity() {
@@ -399,6 +642,7 @@ class TestLevel extends Phaser.Scene {
         // Create dark overlay with fade in
         const overlay = this.add.rectangle(centerX, centerY, this.game.config.width, this.game.config.height, 0x000000, 0);
         overlay.setDepth(10);
+        overlay.setScrollFactor(0); // Fix to camera
         this.tweens.add({
             targets: overlay,
             alpha: 0.97, // Increased darkness further
@@ -411,10 +655,14 @@ class TestLevel extends Phaser.Scene {
             fontSize: '64px',
             fill: '#ff0000',
             fontStyle: 'bold',
-            stroke: '#000000',
-            strokeThickness: 6,
-            shadow: { blur: 10, color: '#ff0000', fill: true }
-        }).setOrigin(0.5).setDepth(11).setAlpha(0).setScale(0.5);
+            stroke: '#000',
+            strokeThickness: 8
+        })
+        .setOrigin(0.5)
+        .setDepth(11)
+        .setScrollFactor(0) // Fix to camera
+        .setAlpha(0)
+        .setScale(0.5);
 
         // Animate death text
         this.tweens.add({
@@ -442,33 +690,47 @@ class TestLevel extends Phaser.Scene {
             'Your fish-fueled fury wasn\'t enough'
         ];
 
-        // Show floor reached
+        // Display floor level with subtle animation
         const floorText = this.add.text(centerX, centerY - 20, `Floor ${this.floorLevel}`, {
-            fontSize: '36px',
+            fontSize: '32px',
             fill: '#ffffff',
             fontStyle: 'bold',
             stroke: '#000000',
             strokeThickness: 4
-        }).setOrigin(0.5).setDepth(11).setAlpha(0);
+        })
+        .setOrigin(0.5)
+        .setDepth(11)
+        .setScrollFactor(0) // Fix to camera
+        .setAlpha(0);
 
-        // Show random death message
+        // Display a random death message
         const messageText = this.add.text(centerX, centerY + 20, deathMessages[Math.floor(Math.random() * deathMessages.length)], {
-            fontSize: '28px',
-            fill: '#ffffff',
-            fontStyle: 'bold',
+            fontSize: '24px',
+            fill: '#cccccc',
+            fontStyle: 'italic',
             stroke: '#000000',
-            strokeThickness: 4
-        }).setOrigin(0.5).setDepth(11).setAlpha(0);
+            strokeThickness: 2,
+            align: 'center',
+            wordWrap: { width: 600 }
+        })
+        .setOrigin(0.5)
+        .setDepth(11)
+        .setScrollFactor(0) // Fix to camera
+        .setAlpha(0);
 
-        // Show high score
+        // High score display
         const highScore = this.getHighScore();
         this.highScoreText = this.add.text(centerX, centerY + 60, `High Score: Floor ${highScore}`, {
             fontSize: '24px',
             fill: '#ffd700',
             fontStyle: 'bold',
             stroke: '#000000',
-            strokeThickness: 4
-        }).setOrigin(0.5).setDepth(11).setAlpha(0);
+            strokeThickness: 3
+        })
+        .setOrigin(0.5)
+        .setDepth(11)
+        .setScrollFactor(0) // Fix to camera
+        .setAlpha(0);
 
         // Fade in stats
         this.tweens.add({
@@ -478,16 +740,18 @@ class TestLevel extends Phaser.Scene {
             delay: 600
         });
 
-        // Create restart button with gradient and glow
+        // Create restart button
         const restartButton = this.add.text(centerX, centerY + 120, 'Restart', {
             fontSize: '36px',
             fill: '#ffffff',
-            backgroundColor: '#4a0000',
-            padding: { left: 25, right: 25, top: 12, bottom: 12 },
-            stroke: '#000000',
-            strokeThickness: 4,
-            shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 2, fill: true }
-        }).setOrigin(0.5).setInteractive().setDepth(11);
+            backgroundColor: '#880000',
+            padding: { x: 20, y: 10 }
+        })
+        .setOrigin(0.5)
+        .setDepth(11)
+        .setScrollFactor(0) // Fix to camera
+        .setAlpha(0)
+        .setInteractive({ useHandCursor: true });
 
         // Add pulsing effect to button
         this.tweens.add({
@@ -711,8 +975,9 @@ class TestLevel extends Phaser.Scene {
         let x, y;
         
         while (!validPosition) {
-            x = Phaser.Math.Between(100, this.game.config.width - 100);
-            y = Phaser.Math.Between(100, this.game.config.height - 100);
+            // Use world bounds instead of game config width/height
+            x = Phaser.Math.Between(100, this.physics.world.bounds.width - 100);
+            y = Phaser.Math.Between(100, this.physics.world.bounds.height - 100);
             
             const distanceFromPenguin = Phaser.Math.Distance.Between(
                 x, y, this.penguin.x, this.penguin.y
@@ -788,7 +1053,7 @@ class TestLevel extends Phaser.Scene {
                 strokeThickness: 8,
                 fontStyle: 'bold'
             }
-        ).setOrigin(0.5).setAlpha(0).setScale(2);
+        ).setOrigin(0.5).setAlpha(0).setScale(2).setScrollFactor(0);
 
         // Create the countdown timer
         let count = 3;
@@ -890,8 +1155,9 @@ class TestLevel extends Phaser.Scene {
         let spawnX, spawnY;
         
         while (!validPosition) {
-            spawnX = Phaser.Math.Between(100, this.game.config.width - 100);
-            spawnY = Phaser.Math.Between(100, this.game.config.height - 100);
+            // Use world bounds instead of game config width/height
+            spawnX = Phaser.Math.Between(100, this.physics.world.bounds.width - 100);
+            spawnY = Phaser.Math.Between(100, this.physics.world.bounds.height - 100);
             
             const distanceFromPlayer = Phaser.Math.Distance.Between(
                 spawnX, spawnY, this.penguin.x, this.penguin.y
@@ -983,9 +1249,9 @@ class TestLevel extends Phaser.Scene {
                 random -= weight;
             }
             
-            // Spawn enemy with calculated position
-            const randomX = Phaser.Math.Between(100, this.game.config.width - 100);
-            const randomY = Phaser.Math.Between(100, this.game.config.height - 100);
+            // Spawn enemy with calculated position - use world bounds
+            const randomX = Phaser.Math.Between(100, this.physics.world.bounds.width - 100);
+            const randomY = Phaser.Math.Between(100, this.physics.world.bounds.height - 100);
             this.spawnEnemy(selectedType, randomX, randomY);
         }
         

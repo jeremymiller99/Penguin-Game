@@ -28,6 +28,8 @@ class Load extends Phaser.Scene {
         
         // Then load the tilemap JSON
         this.load.tilemapTiledJSON('test_map', './assets/test_map.json');
+        this.load.tilemapTiledJSON('test_map_1', './assets/test_map_1.json');
+        this.load.tilemapTiledJSON('test_map_2', './assets/test_map_2.json');
         
         // Add a load error handler to debug any loading issues
         this.load.on('loaderror', (fileObj) => {
@@ -62,6 +64,7 @@ class Load extends Phaser.Scene {
         // Add a quick check to verify the assets loaded
         console.log('Tileset loaded:', this.textures.exists('bg_tileset'));
         console.log('Tilemap loaded:', this.cache.tilemap.exists('test_map'));
+        console.log('Tilemap 1 loaded:', this.cache.tilemap.exists('test_map_1'));
         
         this.anims.create({ key: 'idle', frames: this.anims.generateFrameNumbers('penguin', { start: 0, end: 0 }), frameRate: 8, repeat: -1 });
         this.anims.create({ key: 'walk_right', frames: this.anims.generateFrameNumbers('penguin', { start: 0, end: 3 }), frameRate: 8, repeat: -1 });
