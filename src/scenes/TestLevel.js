@@ -1060,9 +1060,6 @@ class TestLevel extends Phaser.Scene {
             case 'tank':
                 enemy = new TankEnemy(this, spawnX, spawnY);
                 break;
-            case 'bomber':
-                enemy = new BomberEnemy(this, spawnX, spawnY);
-                break;
             default:
                 enemy = new Enemy(this, spawnX, spawnY);
                 break;
@@ -1647,3 +1644,17 @@ class TestLevel extends Phaser.Scene {
         this.scene.start(sceneName, data);
     }
 }
+        // More gradual introduction of melee enemies
+        if (floorLevel >= 3) {
+            enemyTypeDistribution.melee = Math.min(floorLevel - 2, 8);
+        }
+        
+        // More gradual introduction of ranged enemies
+        if (floorLevel >= 6) {
+            enemyTypeDistribution.ranged = Math.min((floorLevel - 5) * 0.8, 8);
+        }
+        
+        // Introduce tank enemies at higher levels
+        if (floorLevel >= 9) {
+            enemyTypeDistribution.tank = Math.min((floorLevel - 8) * 0.6, 6);
+        }

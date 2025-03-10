@@ -16,8 +16,8 @@ class Map extends Phaser.Scene {
     }
 
     create() {
-        // Set background color
-        this.cameras.main.setBackgroundColor('#87CEEB');
+        // Replace the solid background color with ocean layers
+        this.createOceanBackground();
         
         // Check if a map already exists in the registry
         const existingMap = this.registry.get('gameMap');
@@ -54,6 +54,7 @@ class Map extends Phaser.Scene {
         this.drawConnections();
         this.drawNodes();
         this.updateNodeStates();
+        this.initializeTraversedPaths(); // Initialize traversed paths
         this.addPenguinMarker();
         this.createReturnButton();
         this.debugNodeStatus();
@@ -62,6 +63,247 @@ class Map extends Phaser.Scene {
         if (!this.currentNode) {
             this.startFTUESequence();
         }
+    }
+
+    createOceanBackground() {
+        // Create a top-down ocean view
+        const width = this.game.config.width;
+        const height = this.game.config.height;
+        
+        // Deep ocean background (single gradient from medium to dark blue)
+        const oceanGradient = this.add.graphics();
+        oceanGradient.fillGradientStyle(0x1E90FF, 0x1E90FF, 0x0F52BA, 0x0F52BA, 1);
+        oceanGradient.fillRect(0, 0, width, height);
+        
+        // Add whitecaps instead of wave lines
+        this.createWhitecaps();
+        
+        // Add random water sparkles throughout
+        this.time.addEvent({
+            delay: 800,
+            callback: this.addWaterSparkle,
+            callbackScope: this,
+            repeat: -1
+        });
+    }
+
+    createWhitecaps() {
+        // Create a container for all whitecaps
+        this.whitecapsContainer = this.add.container(0, 0);
+        
+        // Create a pool of whitecaps for better performance
+        this.whitecapPool = [];
+        for (let i = 0; i < 20; i++) {
+            const whitecap = this.createWhitecapShape(0, 0);
+            whitecap.setVisible(false);
+            this.whitecapPool.push(whitecap);
+            this.whitecapsContainer.add(whitecap);
+        }
+        
+        // Start spawning whitecaps at different rates
+        this.time.addEvent({
+            delay: 800, // Spawn a new whitecap every 800ms
+            callback: this.spawnWhitecap,
+            callbackScope: this,
+            repeat: -1
+        });
+        
+        // Spawn a few whitecaps immediately
+        for (let i = 0; i < 10; i++) {
+            this.spawnWhitecap();
+        }
+    }
+
+    spawnWhitecap() {
+        const width = this.game.config.width;
+        const height = this.game.config.height;
+        
+        // Get a whitecap from the pool or create a new one if needed
+        let whitecap = this.whitecapPool.find(w => !w.visible);
+        if (!whitecap) {
+            whitecap = this.createWhitecapShape(0, 0);
+            this.whitecapPool.push(whitecap);
+            this.whitecapsContainer.add(whitecap);
+        }
+        
+        // Random position for the whitecap
+        const x = Phaser.Math.Between(0, width);
+        const y = Phaser.Math.Between(0, height);
+        
+        // Reset and position the whitecap
+        whitecap.setPosition(x, y);
+        whitecap.setVisible(true);
+        whitecap.setAlpha(0);
+        whitecap.setScale(Phaser.Math.FloatBetween(0.6, 1.2));
+        whitecap.setRotation(Phaser.Math.FloatBetween(0, Math.PI * 2));
+        
+        // Random movement direction
+        const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const speed = Phaser.Math.FloatBetween(10, 25);
+        const moveX = Math.cos(angle) * speed;
+        const moveY = Math.sin(angle) * speed;
+        
+        // Animate the whitecap with a more natural lifecycle
+        // First fade in
+        this.tweens.add({
+            targets: whitecap,
+            alpha: Phaser.Math.FloatBetween(0.6, 0.9),
+            duration: Phaser.Math.Between(300, 600),
+            ease: 'Sine.InOut',
+            onComplete: () => {
+                // Then drift and fade out
+                this.tweens.add({
+                    targets: whitecap,
+                    x: whitecap.x + moveX,
+                    y: whitecap.y + moveY,
+                    alpha: 0,
+                    scale: whitecap.scale * 0.7,
+                    duration: Phaser.Math.Between(2000, 4000),
+                    ease: 'Sine.Out',
+                    onComplete: () => {
+                        whitecap.setVisible(false);
+                    }
+                });
+            }
+        });
+    }
+
+    createWhitecapShape(x, y) {
+        // Create a container for the whitecap elements
+        const container = this.add.container(x, y);
+        
+        // Randomly choose between different whitecap styles
+        const style = Phaser.Math.Between(1, 5);
+        
+        if (style === 1) {
+            // Style 1: Realistic foam patch with multiple overlapping circles
+            const foamBase = this.add.circle(0, 0, 8, 0xFFFFFF, 0.7);
+            const foam1 = this.add.circle(4, -3, 6, 0xFFFFFF, 0.8);
+            const foam2 = this.add.circle(-5, 2, 7, 0xFFFFFF, 0.75);
+            const foam3 = this.add.circle(2, 5, 5, 0xFFFFFF, 0.65);
+            const foam4 = this.add.circle(-3, -4, 4, 0xFFFFFF, 0.7);
+            
+            container.add([foamBase, foam1, foam2, foam3, foam4]);
+        } 
+        else if (style === 2) {
+            // Style 2: Crescent wave with foam detail
+            const graphics = this.add.graphics();
+            
+            // Main crescent shape
+            graphics.fillStyle(0xFFFFFF, 0.8);
+            graphics.beginPath();
+            graphics.arc(-6, 0, 10, 0, Math.PI, true);
+            graphics.arc(6, 0, 10, Math.PI, Math.PI * 2, true);
+            graphics.fillPath();
+            
+            // Add foam details
+            const foam1 = this.add.circle(-8, -2, 3, 0xFFFFFF, 0.9);
+            const foam2 = this.add.circle(8, -1, 4, 0xFFFFFF, 0.85);
+            const foam3 = this.add.circle(0, 3, 5, 0xFFFFFF, 0.7);
+            
+            container.add([graphics, foam1, foam2, foam3]);
+        }
+        else if (style === 3) {
+            // Style 3: Breaking wave with spray
+            const waveBase = this.add.graphics();
+            waveBase.fillStyle(0xFFFFFF, 0.75);
+            
+            // Wave base
+            waveBase.beginPath();
+            waveBase.moveTo(-12, 0);
+            waveBase.lineTo(-8, -4);
+            waveBase.lineTo(-4, -1);
+            waveBase.lineTo(0, -5);
+            waveBase.lineTo(4, -2);
+            waveBase.lineTo(8, -6);
+            waveBase.lineTo(12, 0);
+            waveBase.lineTo(-12, 0);
+            waveBase.fillPath();
+            
+            // Add spray particles
+            const spray1 = this.add.circle(-6, -7, 2, 0xFFFFFF, 0.6);
+            const spray2 = this.add.circle(0, -8, 1.5, 0xFFFFFF, 0.7);
+            const spray3 = this.add.circle(5, -9, 2, 0xFFFFFF, 0.65);
+            
+            container.add([waveBase, spray1, spray2, spray3]);
+        }
+        else if (style === 4) {
+            // Style 4: Circular foam patch with gradient effect
+            const foamCenter = this.add.circle(0, 0, 7, 0xFFFFFF, 0.85);
+            const foamMiddle = this.add.circle(0, 0, 10, 0xFFFFFF, 0.6);
+            const foamOuter = this.add.circle(0, 0, 13, 0xFFFFFF, 0.3);
+            
+            // Add some texture with small circles
+            const detail1 = this.add.circle(3, -4, 2, 0xFFFFFF, 0.9);
+            const detail2 = this.add.circle(-5, 2, 3, 0xFFFFFF, 0.8);
+            const detail3 = this.add.circle(4, 3, 2, 0xFFFFFF, 0.85);
+            
+            container.add([foamOuter, foamMiddle, foamCenter, detail1, detail2, detail3]);
+        }
+        else {
+            // Style 5: Elongated wave crest
+            const graphics = this.add.graphics();
+            
+            // Main wave line with varying thickness
+            graphics.lineStyle(3, 0xFFFFFF, 0.9);
+            graphics.beginPath();
+            graphics.moveTo(-15, 0);
+            graphics.lineTo(-10, -2);
+            graphics.lineTo(-5, 1);
+            graphics.lineTo(0, -3);
+            graphics.lineTo(5, 0);
+            graphics.lineTo(10, -2);
+            graphics.lineTo(15, 1);
+            graphics.strokePath();
+            
+            // Add foam details along the wave
+            const foam1 = this.add.circle(-10, -2, 3, 0xFFFFFF, 0.7);
+            const foam2 = this.add.circle(0, -3, 4, 0xFFFFFF, 0.8);
+            const foam3 = this.add.circle(10, -2, 3, 0xFFFFFF, 0.7);
+            
+            container.add([graphics, foam1, foam2, foam3]);
+        }
+        
+        return container;
+    }
+
+    addWaterSparkle() {
+        const width = this.game.config.width;
+        const height = this.game.config.height;
+        
+        // Avoid spawning sparkles near the center of the screen where nodes are
+        let sparkleX, sparkleY;
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const avoidRadius = Math.min(width, height) * 0.3;
+        
+        do {
+            sparkleX = Phaser.Math.Between(0, width);
+            sparkleY = Phaser.Math.Between(0, height);
+        } while (
+            Phaser.Math.Distance.Between(sparkleX, sparkleY, centerX, centerY) < avoidRadius &&
+            Math.random() < 0.7 // 70% chance to avoid center, 30% chance to allow it anyway
+        );
+        
+        // Create a more realistic sparkle effect
+        const sparkleSize = Phaser.Math.FloatBetween(0.8, 1.5);
+        const sparkle = this.add.circle(sparkleX, sparkleY, sparkleSize, 0xFFFFFF, 0.5);
+        
+        // Add a subtle glow
+        const glow = this.add.circle(sparkleX, sparkleY, sparkleSize * 2, 0xFFFFFF, 0.2);
+        
+        // Animate both the sparkle and glow
+        this.tweens.add({
+            targets: [sparkle, glow],
+            alpha: 0,
+            scale: { from: 1, to: 1.5 },
+            duration: Phaser.Math.Between(800, 1500),
+            ease: 'Sine.Out',
+            onComplete: () => {
+                sparkle.destroy();
+                glow.destroy();
+            }
+        });
     }
 
     createMap() {
@@ -251,35 +493,94 @@ class Map extends Phaser.Scene {
     }
 
     drawConnections() {
-        const graphics = this.add.graphics();
-        graphics.lineStyle(3, 0xaaaaaa, 0.5);
-
+        // Create a container for all connections
+        this.connectionContainer = this.add.container(0, 0);
+        
+        // Track connections for later reference
+        this.connectionGraphics = [];
+        
         this.nodes.forEach(node => {
             node.connections.forEach(connectionId => {
                 const targetNode = this.nodes.find(n => n.id === connectionId);
+                
+                // Create a graphics object for this specific connection
+                const graphics = this.add.graphics();
+                
+                // Store connection info for later reference
+                const connectionInfo = {
+                    graphics: graphics,
+                    fromNodeId: node.id,
+                    toNodeId: connectionId,
+                    isActive: false, // Will be updated in updateNodeStates
+                    isTraversed: false // Will be set to true when player moves along this path
+                };
+                
+                this.connectionGraphics.push(connectionInfo);
+                this.connectionContainer.add(graphics);
+                
+                // Draw a wavy line using multiple line segments
+                const startX = node.position.x;
+                const startY = node.position.y;
+                const endX = targetNode.position.x;
+                const endY = targetNode.position.y;
+                
+                // Calculate the distance and angle between nodes
+                const distance = Phaser.Math.Distance.Between(startX, startY, endX, endY);
+                const angle = Phaser.Math.Angle.Between(startX, startY, endX, endY);
+                
+                // Initially draw with a dim color - will be updated in updateNodeStates
+                graphics.lineStyle(3, 0x6ECFF6, 0.3);
+                
+                // Create a wavy path with multiple segments
                 graphics.beginPath();
-                graphics.moveTo(node.position.x, node.position.y);
-                graphics.lineTo(targetNode.position.x, targetNode.position.y);
+                graphics.moveTo(startX, startY);
+                
+                // Number of segments in the path
+                const segments = 12;
+                
+                for (let i = 1; i <= segments; i++) {
+                    // Calculate position along the straight line
+                    const t = i / segments;
+                    const x = startX + (endX - startX) * t;
+                    const y = startY + (endY - startY) * t;
+                    
+                    // Add a perpendicular offset to create a wave
+                    // The sine function creates the wave pattern
+                    const waveAmplitude = 10; // How high the waves are
+                    const waveFrequency = 3;  // How many waves along the path
+                    
+                    const perpX = Math.sin(angle + Math.PI/2);
+                    const perpY = Math.cos(angle + Math.PI/2);
+                    
+                    const offset = Math.sin(t * Math.PI * waveFrequency) * waveAmplitude;
+                    
+                    // Draw to the next point with the wave offset applied
+                    graphics.lineTo(
+                        x + perpX * offset,
+                        y - perpY * offset
+                    );
+                }
+                
                 graphics.strokePath();
             });
         });
     }
 
     drawNodes() {
-        const nodeSize = 40; // Size of the square nodes
-
         this.nodes.forEach(node => {
-            // Create square node
-            const nodeSprite = this.add.rectangle(
+            // Randomly select one of the three ice berg sprites
+            const icebergNum = Phaser.Math.Between(1, 3);
+            const icebergKey = `ice_berg_${icebergNum}`;
+            
+            // Create iceberg sprite instead of rectangle - always at full opacity
+            const nodeSprite = this.add.sprite(
                 node.position.x, 
                 node.position.y, 
-                nodeSize, 
-                nodeSize, 
-                this.nodeTypes[node.type].color
-            );
+                icebergKey
+            ).setScale(0.05); // Adjust scale as needed
             
-            // Add border
-            nodeSprite.setStrokeStyle(2, 0xffffff);
+            // Add floating animation to each iceberg
+            this.addIcebergFloatingEffect(nodeSprite);
             
             // Add indicator text based on node type
             let indicatorText;
@@ -292,7 +593,7 @@ class Map extends Phaser.Scene {
                 indicatorText = node.difficultyRating.toString();
             }
             
-            // Create the text object
+            // Create the text object with black color
             node.indicator = this.add.text(
                 node.position.x, 
                 node.position.y, 
@@ -301,8 +602,8 @@ class Map extends Phaser.Scene {
                     fontSize: '24px',
                     fontFamily: 'Arial',
                     fontWeight: 'bold',
-                    color: '#ffffff',
-                    stroke: '#000000',
+                    color: '#000000', // Changed to black
+                    stroke: '#ffffff', // White stroke for better visibility
                     strokeThickness: 3
                 }
             ).setOrigin(0.5);
@@ -313,17 +614,60 @@ class Map extends Phaser.Scene {
             // Add hover effect for ALL nodes, regardless of availability
             nodeSprite.setInteractive();
             nodeSprite.on('pointerover', () => {
-                nodeSprite.setScale(1.1);
-                node.indicator.setScale(1.1);
+                nodeSprite.setScale(0.055); // Slightly larger on hover
                 this.showNodeInfo(node);
             });
 
             nodeSprite.on('pointerout', () => {
-                nodeSprite.setScale(1);
-                node.indicator.setScale(1);
+                nodeSprite.setScale(0.05); // Back to normal size
                 this.hideNodeInfo();
             });
         });
+    }
+
+    addIcebergFloatingEffect(icebergSprite) {
+        // Create a random gentle floating motion for each iceberg
+        const floatDuration = Phaser.Math.Between(2000, 4000);
+        const floatDistance = Phaser.Math.FloatBetween(2, 5);
+        const rotationAmount = Phaser.Math.FloatBetween(-0.02, 0.02);
+        
+        // Random starting phase so icebergs don't all move in sync
+        const startDelay = Phaser.Math.Between(0, 1000);
+        
+        // Slight rotation
+        this.tweens.add({
+            targets: icebergSprite,
+            rotation: rotationAmount,
+            duration: floatDuration * 1.5,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.InOut',
+            delay: startDelay
+        });
+        
+        // Vertical floating motion
+        this.tweens.add({
+            targets: icebergSprite,
+            y: icebergSprite.y + floatDistance,
+            duration: floatDuration,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.InOut',
+            delay: startDelay
+        });
+        
+        // Ensure the indicator text follows the iceberg
+        if (icebergSprite.indicator) {
+            this.tweens.add({
+                targets: icebergSprite.indicator,
+                y: icebergSprite.indicator.y + floatDistance,
+                duration: floatDuration,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.InOut',
+                delay: startDelay
+            });
+        }
     }
 
     showNodeInfo(node, isCompleted) {
@@ -410,11 +754,15 @@ class Map extends Phaser.Scene {
                 node
             );
             
+            // Mark the connection as traversed
+            this.markConnectionTraversed(this.currentNode, node.id);
+            
             this.movePenguinAlongPath(points, () => {
+                // Update current node
+                this.currentNode = node.id;
+                
                 // If this is an unbeaten node, start the level
                 if (!this.completedNodes.has(node.id)) {
-                    this.currentNode = node.id;
-                    
                     // Update registry before starting level
                     const gameMap = this.registry.get('gameMap');
                     this.registry.set('gameMap', {
@@ -439,8 +787,6 @@ class Map extends Phaser.Scene {
                     }
                 } else {
                     // Just moving to a completed node
-                    this.currentNode = node.id;
-                    
                     // Update registry after movement
                     const gameMap = this.registry.get('gameMap');
                     this.registry.set('gameMap', {
@@ -451,6 +797,7 @@ class Map extends Phaser.Scene {
                     });
                     
                     this.updateNodeStates();
+                    this.updateConnectionStates(); // Make sure connections update too
                 }
             });
         }
@@ -578,54 +925,110 @@ class Map extends Phaser.Scene {
     }
 
     updateNodeStates() {
+        // First update all connections
+        this.updateConnectionStates();
+        
         this.nodes.forEach(node => {
             if (!node.sprite) return;
             
-            // Clear any existing checkmark
-            if (node.checkmark) {
-                node.checkmark.destroy();
-                node.checkmark = null;
-            }
+            // Clear any existing visual indicators
+            if (node.checkmark) node.checkmark.destroy();
+            if (node.highlight) node.highlight.destroy();
+            if (node.glow) node.glow.destroy();
+            
+            node.checkmark = null;
+            node.highlight = null;
+            node.glow = null;
 
             const state = this.getNodeState(node);
             const isCompleted = this.completedNodes.has(node.id);
             
-            // Base appearance
+            // Keep icebergs at full opacity and natural color always
+            node.sprite.clearTint().setAlpha(1);
+            
+            // Add appropriate visual indicators based on state
             if (isCompleted) {
-                // All completed nodes get darker color
-                const completedColor = Phaser.Display.Color.ValueToColor(this.nodeTypes[node.type].color)
-                    .darken(50)
-                    .color;
-                
-                node.sprite
-                    .setFillStyle(completedColor)
-                    .setAlpha(0.8);
-
-                // All completed nodes get checkmark
+                // Completed nodes get a checkmark
                 node.checkmark = this.add.text(
                     node.position.x, 
                     node.position.y + 20, // Position below the indicator text
                     '✓', 
                     { 
                         fontSize: '18px',
-                        color: '#ffffff'
+                        color: '#000000', // Black checkmark
+                        stroke: '#ffffff', // White stroke
+                        strokeThickness: 2
                     }
                 ).setOrigin(0.5);
                 
+                // Add a subtle completed highlight (blue ring)
+                node.highlight = this.add.circle(
+                    node.position.x,
+                    node.position.y,
+                    30, // Slightly larger than the iceberg
+                    0x3498db, // Blue color
+                    0.3 // Subtle transparency
+                ).setDepth(-1); // Behind the iceberg
+                
+                // Make the checkmark and highlight float with the iceberg
+                this.syncFloatingEffects(node);
+                
                 // Update indicator text appearance for completed nodes
                 if (node.indicator) {
-                    node.indicator.setAlpha(0.8);
+                    node.indicator.setAlpha(1); // Keep text fully visible
+                }
+            } else if (state === NodeState.AVAILABLE_ACTIVE) {
+                // Available nodes get a bright highlight to show they're clickable
+                node.highlight = this.add.circle(
+                    node.position.x,
+                    node.position.y,
+                    32, // Slightly larger than the iceberg
+                    0xf1c40f, // Yellow/gold color
+                    0.4 // More visible
+                ).setDepth(-1); // Behind the iceberg
+                
+                // Add a pulsing glow effect to available nodes
+                node.glow = this.add.sprite(
+                    node.position.x, 
+                    node.position.y, 
+                    'sparkTexture'
+                )
+                    .setScale(5)
+                    .setAlpha(0.3)
+                    .setDepth(-2); // Behind the highlight
+                
+                this.tweens.add({
+                    targets: node.glow,
+                    alpha: 0.5,
+                    scale: 6,
+                    duration: 1500,
+                    yoyo: true,
+                    repeat: -1
+                });
+                
+                // Make the highlight and glow float with the iceberg
+                this.syncFloatingEffects(node);
+                
+                // Ensure indicator text is fully visible
+                if (node.indicator) {
+                    node.indicator.setAlpha(1);
                 }
             } else {
-                // Non-completed nodes
-                node.sprite
-                    .setFillStyle(state === NodeState.AVAILABLE_ACTIVE ? 
-                        this.nodeTypes[node.type].color : 0x666666)
-                    .setAlpha(state === NodeState.AVAILABLE_ACTIVE ? 1 : 0.5);
-                    
-                // Update indicator text appearance for non-completed nodes
+                // Unavailable nodes get a subtle gray highlight
+                node.highlight = this.add.circle(
+                    node.position.x,
+                    node.position.y,
+                    30, // Same size as completed
+                    0x95a5a6, // Gray color
+                    0.2 // Very subtle
+                ).setDepth(-1); // Behind the iceberg
+                
+                // Make the highlight float with the iceberg
+                this.syncFloatingEffects(node);
+                
+                // Dim the indicator text slightly for unavailable nodes
                 if (node.indicator) {
-                    node.indicator.setAlpha(state === NodeState.AVAILABLE_ACTIVE ? 1 : 0.5);
+                    node.indicator.setAlpha(0.7); // Still readable but visually distinct
                 }
             }
 
@@ -649,6 +1052,209 @@ class Map extends Phaser.Scene {
                 this.game.canvas.style.cursor = 'default';
             });
         });
+    }
+
+    updateConnectionStates() {
+        if (!this.connectionGraphics) return;
+        
+        this.connectionGraphics.forEach(connection => {
+            const fromNode = this.nodes.find(n => n.id === connection.fromNodeId);
+            const toNode = this.nodes.find(n => n.id === connection.toNodeId);
+            
+            if (!fromNode || !toNode) return;
+            
+            // Clear previous drawing
+            connection.graphics.clear();
+            
+            // Get states for both nodes
+            const fromNodeState = this.getNodeState(fromNode);
+            const toNodeState = this.getNodeState(toNode);
+            
+            // Check if either node is the current node
+            const isFromCurrent = fromNode.id === this.currentNode;
+            const isToCurrent = toNode.id === this.currentNode;
+            
+            // Check if both nodes are completed (traversed path)
+            const isTraversed = this.completedNodes.has(fromNode.id) && this.completedNodes.has(toNode.id);
+            
+            // A path is active if:
+            // 1. It connects to the current node and leads to an available node
+            // 2. It connects two completed nodes (has been traversed)
+            const isActive = 
+                (isFromCurrent && (toNodeState === NodeState.AVAILABLE_ACTIVE || toNodeState === NodeState.AVAILABLE_COMPLETED)) ||
+                (isToCurrent && (fromNodeState === NodeState.AVAILABLE_ACTIVE || fromNodeState === NodeState.AVAILABLE_COMPLETED)) ||
+                isTraversed;
+            
+            // Update connection state
+            connection.isActive = isActive;
+            connection.isTraversed = isTraversed;
+            
+            // Set appropriate style based on state
+            if (isTraversed) {
+                // Traversed paths get a bright, solid appearance
+                connection.graphics.lineStyle(4, 0x3498db, 0.8); // Bright blue, more visible
+            } else if (isActive) {
+                // Active but not traversed paths get a bright, slightly transparent appearance
+                connection.graphics.lineStyle(3, 0x2ecc71, 0.7); // Green, fairly visible
+            } else {
+                // Inactive paths get a dim appearance
+                connection.graphics.lineStyle(2, 0x6ECFF6, 0.3); // Light blue, very subtle
+            }
+            
+            // Redraw the path with the new style
+            this.drawWavyPath(
+                connection.graphics, 
+                fromNode.position.x, fromNode.position.y,
+                toNode.position.x, toNode.position.y
+            );
+            
+            // Add animation only to active paths
+            if (isActive) {
+                // If we don't already have a tween for this connection
+                if (!connection.tween) {
+                    connection.tween = this.tweens.add({
+                        targets: connection.graphics,
+                        alpha: isTraversed ? 0.9 : 0.6, // Traversed paths pulse less
+                        duration: isTraversed ? 3000 : 2000, // Traversed paths pulse slower
+                        yoyo: true,
+                        repeat: -1,
+                        ease: 'Sine.InOut'
+                    });
+                }
+            } else if (connection.tween) {
+                // Remove animation from inactive paths
+                connection.tween.stop();
+                connection.tween = null;
+                connection.graphics.setAlpha(1);
+            }
+        });
+    }
+
+    drawWavyPath(graphics, startX, startY, endX, endY) {
+        // Calculate the distance and angle between nodes
+        const distance = Phaser.Math.Distance.Between(startX, startY, endX, endY);
+        const angle = Phaser.Math.Angle.Between(startX, startY, endX, endY);
+        
+        // Create a wavy path with multiple segments
+        graphics.beginPath();
+        graphics.moveTo(startX, startY);
+        
+        // Number of segments in the path
+        const segments = 12;
+        
+        for (let i = 1; i <= segments; i++) {
+            // Calculate position along the straight line
+            const t = i / segments;
+            const x = startX + (endX - startX) * t;
+            const y = startY + (endY - startY) * t;
+            
+            // Add a perpendicular offset to create a wave
+            // The sine function creates the wave pattern
+            const waveAmplitude = 10; // How high the waves are
+            const waveFrequency = 3;  // How many waves along the path
+            
+            const perpX = Math.sin(angle + Math.PI/2);
+            const perpY = Math.cos(angle + Math.PI/2);
+            
+            const offset = Math.sin(t * Math.PI * waveFrequency) * waveAmplitude;
+            
+            // Draw to the next point with the wave offset applied
+            graphics.lineTo(
+                x + perpX * offset,
+                y - perpY * offset
+            );
+        }
+        
+        graphics.strokePath();
+    }
+
+    syncFloatingEffects(node) {
+        // Make visual indicators float with their iceberg
+        if (!node.sprite || !node.sprite.floatTween) return;
+        
+        const floatDistance = node.sprite.floatDistance || 3;
+        const floatDuration = node.sprite.floatDuration || 3000;
+        const startDelay = node.sprite.startDelay || 0;
+        
+        // Sync highlight
+        if (node.highlight) {
+            this.tweens.add({
+                targets: node.highlight,
+                y: node.highlight.y + floatDistance,
+                duration: floatDuration,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.InOut',
+                delay: startDelay
+            });
+        }
+        
+        // Sync checkmark
+        if (node.checkmark) {
+            this.tweens.add({
+                targets: node.checkmark,
+                y: node.checkmark.y + floatDistance,
+                duration: floatDuration,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.InOut',
+                delay: startDelay
+            });
+        }
+        
+        // Sync glow
+        if (node.glow) {
+            this.tweens.add({
+                targets: node.glow,
+                y: node.glow.y + floatDistance,
+                duration: floatDuration,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.InOut',
+                delay: startDelay
+            });
+        }
+        
+        // Sync indicator text
+        if (node.indicator && !node.indicator.floatTween) {
+            node.indicator.floatTween = this.tweens.add({
+                targets: node.indicator,
+                y: node.indicator.y + floatDistance,
+                duration: floatDuration,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.InOut',
+                delay: startDelay
+            });
+        }
+    }
+
+    markConnectionTraversed(fromNodeId, toNodeId) {
+        // Find the connection and mark it as traversed
+        const connection = this.connectionGraphics.find(c => 
+            (c.fromNodeId === fromNodeId && c.toNodeId === toNodeId) ||
+            (c.fromNodeId === toNodeId && c.toNodeId === fromNodeId)
+        );
+        
+        if (connection) {
+            connection.isTraversed = true;
+            
+            // Store traversed connections in registry for persistence
+            const gameMap = this.registry.get('gameMap');
+            if (!gameMap.traversedConnections) {
+                gameMap.traversedConnections = [];
+            }
+            
+            // Add this connection if not already stored
+            const connectionKey = [fromNodeId, toNodeId].sort().join('-');
+            if (!gameMap.traversedConnections.includes(connectionKey)) {
+                gameMap.traversedConnections.push(connectionKey);
+                this.registry.set('gameMap', gameMap);
+            }
+            
+            // Update the connection visually
+            this.updateConnectionStates();
+        }
     }
 
     startFTUESequence() {
@@ -721,5 +1327,48 @@ class Map extends Phaser.Scene {
                 difficultyRating: 1
             });
         });
+    }
+
+    initializeTraversedPaths() {
+        if (!this.connectionGraphics) return;
+        
+        // Mark connections between completed nodes as traversed
+        this.connectionGraphics.forEach(connection => {
+            const fromNode = this.nodes.find(n => n.id === connection.fromNodeId);
+            const toNode = this.nodes.find(n => n.id === connection.toNodeId);
+            
+            if (this.completedNodes.has(fromNode.id) && this.completedNodes.has(toNode.id)) {
+                connection.isTraversed = true;
+            }
+        });
+        
+        // Update the visual state of all connections
+        this.updateConnectionStates();
+    }
+
+    completeNode(nodeId) {
+        // Mark the node as completed
+        this.completedNodes.add(nodeId);
+        
+        // Update available nodes based on connections
+        const node = this.nodes.find(n => n.id === nodeId);
+        if (node) {
+            node.connections.forEach(connId => {
+                this.availableNodes.add(connId);
+            });
+        }
+        
+        // Update registry
+        const gameMap = this.registry.get('gameMap');
+        this.registry.set('gameMap', {
+            ...gameMap,
+            currentNode: nodeId,
+            completedNodes: Array.from(this.completedNodes),
+            availableNodes: Array.from(this.availableNodes)
+        });
+        
+        // Update visual states
+        this.updateNodeStates();
+        this.updateConnectionStates();
     }
 } 

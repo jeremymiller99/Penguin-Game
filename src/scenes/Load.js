@@ -14,6 +14,7 @@ class Load extends Phaser.Scene {
         this.load.image('icn_bullet', './assets/icons/icn_bullet.png');
         this.load.image('icn_cash', './assets/icons/icn_cash.png');
         this.load.image('icn_fish', './assets/icons/icn_fish.png');
+
         this.load.spritesheet('enemySprite', './assets/hazmat_guy.png', { frameWidth: 16, frameHeight: 16 });
         
         // Load enemy spritesheet with more frames for new enemy types
@@ -82,6 +83,11 @@ class Load extends Phaser.Scene {
         this.load.image('perk_double_cash', 'assets/images/perks/double_cash.png');
         this.load.image('perk_barrel_master', 'assets/images/perks/barrel_master.png');
         this.load.image('perk_enemy_weakener', 'assets/images/perks/enemy_weakener.png');
+
+        // Load iceberg sprites for map nodes
+        this.load.image('ice_berg_1', './assets/ice_berg_1.png');
+        this.load.image('ice_berg_2', './assets/ice_berg_2.png');
+        this.load.image('ice_berg_3', './assets/ice_berg_3.png');
     }
 
     create() {
