@@ -109,9 +109,12 @@ class Cutscene extends Phaser.Scene {
         // Add space key listener
         this.spaceKey = this.input.keyboard.addKey('SPACE');
         this.spaceKey.on('down', () => {
+            // Clear any existing map data
+            this.registry.remove('gameMap');
+            
             this.cameras.main.fadeOut(500, 0, 0, 0);
             this.cameras.main.once('camerafadeoutcomplete', () => {
-                this.scene.start('TestLevel');
+                this.scene.start('Map');
             });
         });
     }

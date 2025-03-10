@@ -7,8 +7,9 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.setScale(2);
         this.setOrigin(0.5, 0.5);
 
-        // Initialize with default values that can be overridden
-        this.maxHealth = config.maxHealth || 100;
+        // Scale enemy health based on difficulty and game balance
+        const baseHealth = 30; // Reduce from previous value for better balance
+        this.maxHealth = Math.ceil(baseHealth * (scene.enemyHealthMultiplier || 1.0));
         this.health = this.maxHealth;
         this.speed = config.speed || 100;
         this.attackRange = config.attackRange || 50;
@@ -216,5 +217,35 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
 
         // Update background music
         //scene.updateBackgroundMusic();
+    }
+}
+
+class MeleeEnemy extends Enemy {
+    constructor(scene, x, y) {
+        super(scene, x, y);
+        
+        // Increase speed but reduce health for more interesting gameplay
+        this.moveSpeed = 120; // Faster than base enemies
+        this.attackDamage = 15;
+        this.maxHealth = Math.ceil(25 * (scene.enemyHealthMultiplier || 1.0));
+        this.health = this.maxHealth;
+    }
+}
+
+class RangedEnemy extends Enemy {
+    constructor(scene, x, y) {
+        super(scene, x, y);
+        
+        // Slower but with better range
+        this.moveSpeed = 80;
+        this.attackRange = 250; // Increased range
+        this.maxHealth = Math.ceil(20 * (scene.enemyHealthMultiplier || 1.0));
+        this.health = this.maxHealth;
+        
+        // Set gun properties for better balance
+        if (this.gun) {
+            this.gun.fireRate = 800; // Slower fire rate
+            this.gun.bulletSpeed = 300; // Easier to dodge bullets
+        }
     }
 } 

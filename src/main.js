@@ -6,8 +6,8 @@
 let config = {
     parent: 'game-canvas',
     type: Phaser.WEBGL,
-    width: 960,
-    height: 512,
+    width: 1280,
+    height: 720,
     pixelArt: true,
     physics: {
         default: 'arcade',
@@ -16,7 +16,7 @@ let config = {
             gravity: { x: 0, y: 0 }
         }
     },
-    scene: [Load, Menu, Briefing, Cutscene, TestLevel]
+    scene: [Load, Menu, Briefing, Cutscene, Map, TestLevel, PerkRoom]
 };
 
 let game = new Phaser.Game(config);

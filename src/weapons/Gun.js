@@ -9,14 +9,20 @@ class Gun extends Phaser.GameObjects.Container {
         
         // Initialize gun properties
         this.shotsPerSecond = 10;
-        this.fireDelay = 1000 / this.shotsPerSecond;
-        this.damage = 50;
+        this.fireDelay = 1000 / this.shotsPerSecond; // Time in ms between shots
+        this.damage = 15;
         this.maxAmmo = 30;
         this.currentAmmo = this.maxAmmo;
-        this.reloadTime = 1000;
+        this.reloadTime = 800;
         this.lastFired = 0;
         this.isReloading = false;
         this.isFiring = false;
+        this.bulletSpeed = 700;
+        this.perksApplied = false; // Track if perks have been applied to this gun
+
+        // Store original values for resetting
+        this.originalFireDelay = this.fireDelay;
+        this.originalDamage = this.damage;
 
         // Add gun sprite with offset
         this.gunSprite = scene.add.sprite(20, 0, 'ak47')
@@ -65,6 +71,14 @@ class Gun extends Phaser.GameObjects.Container {
         this.player = newPlayer;
         newPlayer.gun = this;
         this.isAIControlled = newPlayer instanceof RangedEnemy;
+        
+        // Reset perksApplied flag to ensure perks get reapplied
+        this.perksApplied = false;
+        
+        // If the player has a perk manager, reapply weapon perks
+        if (!this.isAIControlled && this.scene.perkManager) {
+            this.scene.perkManager.update(); // This will trigger perk reapplication
+        }
     }
 
     update(time) {
