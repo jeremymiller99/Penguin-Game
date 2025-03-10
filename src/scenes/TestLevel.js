@@ -16,6 +16,23 @@ class TestLevel extends Phaser.Scene {
         this.nodeType = data.nodeType;
         this.difficultyRating = data.difficultyRating || 1; // Default to 1 if not provided
         
+        // Check if this is a building interior
+        this.isInterior = data.isInterior || false;
+        this.parentSceneKey = data.parentScene || null;
+        this.buildingType = data.buildingType || null;
+        
+        // Check if returning from a building
+        this.returningFromBuilding = data.returnFromBuilding || false;
+        this.returnPosition = data.playerPosition || null;
+        
+        // Check if we should preserve the iceberg state
+        this.preserveIceberg = data.preserveIceberg || false;
+        
+        // If returning with currency, update it
+        if (data.playerCurrency !== undefined) {
+            this.playerCurrency = data.playerCurrency;
+        }
+        
         // Create a smoother difficulty curve with more gradual progression
         // Instead of jumps of 10 floors per difficulty rating
         this.floorLevel = Math.ceil(Math.pow(this.difficultyRating, 1.7) + this.difficultyRating);
@@ -33,14 +50,41 @@ class TestLevel extends Phaser.Scene {
     }
 
     create() {
+        // If we're returning from a building and should preserve the iceberg,
+        // we need to store the current map key before generating a new one
+        let mapKey = null;
+        
+        if (this.preserveIceberg && this.returningFromBuilding) {
+            // Store the current map key from the registry
+            mapKey = this.registry.get('currentMapKey');
+            console.log("Preserving iceberg with map key:", mapKey);
+        }
+        
+        // Add debug text to show current scene type
+        this.sceneTypeText = this.add.text(10, 10, this.getSceneTypeText(), {
+            fontSize: '16px',
+            fontFamily: 'Arial',
+            fill: '#ffffff',
+            backgroundColor: '#000000',
+            padding: { x: 5, y: 3 }
+        }).setScrollFactor(0).setDepth(1000);
+        
         this.cameras.main.setBackgroundColor('#87CEEB');
 
-        // Randomly choose between test_map and test_map_1
+        // Randomly choose between test_map and test_map_1, or use preserved map
+        let randomMapKey;
+        if (mapKey) {
+            randomMapKey = mapKey;
+        } else {
         const mapKeys = ['test_map_3', 'test_map_1', 'test_map_2'];
-        const randomMapKey = mapKeys[Math.floor(Math.random() * mapKeys.length)];
+            randomMapKey = mapKeys[Math.floor(Math.random() * mapKeys.length)];
+            // Store the map key in the registry for future use
+            this.registry.set('currentMapKey', randomMapKey);
+        }
+        
         console.log('Selected map:', randomMapKey);
 
-        // Create the tilemap using the randomly selected map
+        // Create the tilemap using the selected map
         const map = this.make.tilemap({ key: randomMapKey });
         console.log('Map created:', map);
 
@@ -277,21 +321,6 @@ class TestLevel extends Phaser.Scene {
 
         this.startCountdown();
 
-        // Initialize background music
-        /* Original dual-music system
-        this.musicWithEnemies = this.sound.add('music_with_enemies', {
-            loop: true,
-            volume: 0.3
-        });
-        this.musicNoEnemies = this.sound.add('music_no_enemies', {
-            loop: true,
-            volume: 0.3
-        });
-        
-        // Start with combat music since we spawn with enemies
-        this.musicWithEnemies.play();
-        */
-
         // Simple single music track
         this.backgroundMusic = this.sound.add('song_1', {
             loop: true,
@@ -300,10 +329,6 @@ class TestLevel extends Phaser.Scene {
         this.backgroundMusic.play();
 
         this.events.on('shutdown', () => {
-            /* Original cleanup
-            if (this.musicWithEnemies) this.musicWithEnemies.stop();
-            if (this.musicNoEnemies) this.musicNoEnemies.stop();
-            */
             if (this.backgroundMusic) this.backgroundMusic.stop();
         });
 
@@ -374,6 +399,31 @@ class TestLevel extends Phaser.Scene {
         
         // Create perk UI
         this.createPerkUI();
+
+        // Comment out ALL building-related code
+        // this.spawnBuildings();
+        
+        // If returning from a building, position the player at the return position
+        if (this.returningFromBuilding && this.returnPosition) {
+            this.penguin.x = this.returnPosition.x;
+            this.penguin.y = this.returnPosition.y;
+            
+            // Update camera to follow player at new position
+            this.cameras.main.startFollow(this.penguin, true, 0.09, 0.09);
+        }
+
+        // Comment out ALL building-related code including the conditional checks
+        // if (!this.isInterior) {
+        //     console.log("On iceberg - spawning buildings");
+        //     this.spawnBuildings();
+        // } else {
+        //     console.log("Inside building - not spawning additional buildings");
+        //     // If this is a building interior, add an exit door
+        //     this.createExitDoor();
+        //     
+        //     // Customize the interior based on building type
+        //     this.customizeInterior();
+        // }
     }
 
     createMinimap(worldWidth, worldHeight) {
@@ -455,8 +505,13 @@ class TestLevel extends Phaser.Scene {
         // Update entity markers
         this.updateEnemyMarkers();
         this.updateCashMarkers();
-        this.updateCrateMarkers(); // Add crate marker updates
+        this.updateCrateMarkers();
         this.updateLadderMarker();
+        
+        // Only call updateBuildingMarkers if we're not in an interior scene
+        if (!this.isInterior) {
+            this.updateBuildingMarkers();
+        }
     }
 
     updateEnemyMarkers() {
@@ -611,6 +666,15 @@ class TestLevel extends Phaser.Scene {
         const playerHealthPercent = this.penguin.health / this.penguin.maxHealth;
         this.playerHealthBar.foreground.width = 160 * playerHealthPercent;
         
+        // Update buildings - only if we're on the iceberg (not in a building)
+        if (this.buildings && !this.isInterior) {
+            this.buildings.getChildren().forEach(building => {
+                if (building.update) {
+                    building.update();
+                }
+            });
+        }
+        
         // Update minimap player position
         this.updateMinimap();
         
@@ -625,6 +689,23 @@ class TestLevel extends Phaser.Scene {
         // Update perks
         if (this.perkManager) {
             this.perkManager.update();
+        }
+        
+        // Reset exit door highlight if player moves away - ONLY if we're in an interior
+        if (this.isInterior && this.exitHighlighted && this.exitZone && this.penguin && this.exitPrompt) {
+            const distance = Phaser.Math.Distance.Between(
+                this.exitZone.x, this.exitZone.y,
+                this.penguin.x, this.penguin.y
+            );
+            
+            if (distance > 100) {
+                this.exitHighlighted = false;
+                if (this.exitDoor) this.exitDoor.setFillStyle(0x553311); // Reset to original color
+                if (this.exitPrompt) {
+                    this.exitPrompt.setBackgroundColor('#000000');
+                    this.exitPrompt.setColor('#ffcc00');
+                }
+            }
         }
     }
 
@@ -950,6 +1031,9 @@ class TestLevel extends Phaser.Scene {
     }
 
     handleBulletEnemyCollision(bullet, enemy) {
+        // Check if bullet and enemy are valid
+        if (!bullet || !bullet.active || !enemy || !enemy.active) return;
+        
         bullet.destroy();
         
         // Check for explosive rounds perk
@@ -979,12 +1063,10 @@ class TestLevel extends Phaser.Scene {
         // Add collision between enemy bullets and player
         if (enemy instanceof RangedEnemy && enemy.gun) {
             this.physics.add.collider(enemy.gun.bullets, this.penguin, (penguin, bullet) => {
-                // Check for invulnerability
-                if (!penguin.isInvulnerable) {
-                    bullet.destroy();
-                    penguin.health -= enemy.attackDamage;
+                if (!bullet || !bullet.active) return;
                     
-                    // Play sound effect
+                bullet.destroy();
+                penguin.health -= enemy.damage;
                     this.sound.play('hit', {
                         volume: 0.4,
                         rate: 0.8 + Math.random() * 0.4
@@ -995,17 +1077,25 @@ class TestLevel extends Phaser.Scene {
                     this.time.delayedCall(100, () => {
                         penguin.clearTint();
                     });
-                } else {
-                    // Still destroy the bullet but no damage
-                    bullet.destroy();
-                    
-                    // Play a "dodge" sound effect
-                    this.sound.play('dodge', {
-                        volume: 0.3,
-                        rate: 1.2
-                    });
-                }
             });
+            
+            // Add collision between enemy bullets and crates
+            this.physics.add.collider(enemy.gun.bullets, this.crates, (bullet, crate) => {
+                if (!bullet || !bullet.active || !crate || !crate.active) return;
+                
+                    bullet.destroy();
+                crate.takeDamage(enemy.damage / 2);
+            });
+            
+            // Add collision between enemy bullets and barrels
+            if (this.barrels) {
+                this.physics.add.collider(enemy.gun.bullets, this.barrels, (bullet, barrel) => {
+                    if (!bullet || !bullet.active || !barrel || !barrel.active) return;
+                    
+                    bullet.destroy();
+                    barrel.takeDamage(enemy.damage);
+                });
+            }
         }
     }
 
@@ -1051,9 +1141,6 @@ class TestLevel extends Phaser.Scene {
             case 'tank':
                 enemy = new TankEnemy(this, spawnX, spawnY);
                 break;
-            case 'bomber':
-                enemy = new BomberEnemy(this, spawnX, spawnY);
-                break;
             default:
                 enemy = new Enemy(this, spawnX, spawnY);
                 break;
@@ -1068,13 +1155,15 @@ class TestLevel extends Phaser.Scene {
         // Handle ranged enemy bullets
         if (enemy instanceof RangedEnemy && enemy.gun) {
             this.physics.add.collider(enemy.gun.bullets, this.penguin, (penguin, bullet) => {
+                if (!bullet || !bullet.active) return;
+                
                 bullet.destroy();
                 penguin.health -= enemy.damage;
                 this.sound.play('hit', {
                     volume: 0.4,
                     rate: 0.8 + Math.random() * 0.4
                 });
-
+    
                 // Apply visual feedback
                 penguin.setTint(0xff0000);
                 this.time.delayedCall(100, () => {
@@ -1084,11 +1173,23 @@ class TestLevel extends Phaser.Scene {
             
             // Add collision between enemy bullets and crates
             this.physics.add.collider(enemy.gun.bullets, this.crates, (bullet, crate) => {
+                if (!bullet || !bullet.active || !crate || !crate.active) return;
+                
                 bullet.destroy();
                 crate.takeDamage(enemy.damage / 2);
             });
+            
+            // Add collision between enemy bullets and barrels
+            if (this.barrels) {
+                this.physics.add.collider(enemy.gun.bullets, this.barrels, (bullet, barrel) => {
+                    if (!bullet || !bullet.active || !barrel || !barrel.active) return;
+                    
+                    bullet.destroy();
+                    barrel.takeDamage(enemy.damage);
+                });
+            }
         }
-        
+
         return enemy;
     }
 
@@ -1377,8 +1478,17 @@ class TestLevel extends Phaser.Scene {
     spawnLevelEntities() {
         const params = this.calculateDifficultyParams(this.floorLevel);
         
+        // Adjust enemy count if we're in a building
+        let enemyCount = params.enemyCount;
+        if (this.isInterior) {
+            // Fewer enemies in shops, normal amount in standard buildings
+            if (this.buildingType === 'shop') {
+                enemyCount = Math.floor(enemyCount * 0.5); // 50% fewer enemies in shops
+            }
+        }
+        
         // Spawn enemies
-        for (let i = 0; i < params.enemyCount; i++) {
+        for (let i = 0; i < enemyCount; i++) {
             // Calculate enemy type based on distribution
             const totalWeight = Object.values(params.enemyTypeDistribution).reduce((a, b) => a + b, 0);
             let random = Math.random() * totalWeight;
@@ -1622,5 +1732,467 @@ class TestLevel extends Phaser.Scene {
     transitionToScene(sceneName, data = {}) {
         this.saveGameState();
         this.scene.start(sceneName, data);
+    }
+
+    // Add this method to spawn buildings in the level
+    spawnBuildings() {
+        // Don't spawn buildings if we're inside a building
+        if (this.isInterior) {
+            console.log("Inside a building - not spawning additional buildings");
+            return;
+        }
+        
+        // Determine how many buildings to spawn based on difficulty
+        const buildingCount = Math.min(Math.ceil(this.difficultyRating / 2), 3);
+        
+        // Create a group for buildings
+        this.buildings = this.add.group();
+        
+        console.log(`Spawning ${buildingCount} buildings on the iceberg`);
+        
+        // Spawn buildings
+        for (let i = 0; i < buildingCount; i++) {
+            // Determine building type - only standard or shop for now
+            let buildingType = 'standard';
+            
+            // Make one building a shop if there are multiple buildings
+            if (i === buildingCount - 1 && buildingCount > 1) {
+                buildingType = 'shop';
+            }
+            
+            // Find a valid position for the building
+            let validPosition = false;
+            let x, y;
+            
+            while (!validPosition) {
+                x = Phaser.Math.Between(200, this.physics.world.bounds.width - 200);
+                y = Phaser.Math.Between(200, this.physics.world.bounds.height - 200);
+                
+                // Check distance from player
+                const distanceFromPlayer = Phaser.Math.Distance.Between(
+                    x, y, this.penguin.x, this.penguin.y
+                );
+                
+                // Check distance from other buildings
+                let tooCloseToOtherBuilding = false;
+                this.buildings.getChildren().forEach(building => {
+                    const distanceFromBuilding = Phaser.Math.Distance.Between(
+                        x, y, building.x, building.y
+                    );
+                    if (distanceFromBuilding < 300) {
+                        tooCloseToOtherBuilding = true;
+                    }
+                });
+                
+                // Check distance from shop
+                let tooCloseToShop = false;
+                if (this.shop) {
+                    const distanceFromShop = Phaser.Math.Distance.Between(
+                        x, y, this.shop.x, this.shop.y
+                    );
+                    if (distanceFromShop < 300) {
+                        tooCloseToShop = true;
+                    }
+                }
+                
+                // Check distance from ladder
+                let tooCloseToLadder = false;
+                if (this.ladder) {
+                    const distanceFromLadder = Phaser.Math.Distance.Between(
+                        x, y, this.ladder.x, this.ladder.y
+                    );
+                    if (distanceFromLadder < 300) {
+                        tooCloseToLadder = true;
+                    }
+                }
+                
+                if (distanceFromPlayer > 300 && !tooCloseToOtherBuilding && 
+                    !tooCloseToShop && !tooCloseToLadder) {
+                    validPosition = true;
+                }
+            }
+            
+            // Create building configuration
+            const buildingConfig = {
+                texture: 'building', // Default texture
+                scale: 1.5,
+                difficulty: this.difficultyRating,
+                buildingType: buildingType,
+                enemyMultiplier: 1.0,
+                lootMultiplier: 1.0
+            };
+            
+            // Create the building
+            const building = new Building(this, x, y, buildingConfig);
+            this.buildings.add(building);
+            
+            // Add collision with player and enemies
+            this.physics.add.collider(this.penguin, building);
+            this.physics.add.collider(this.enemies, building);
+        }
+        
+        // Add buildings to minimap
+        this.updateBuildingMarkers();
+    }
+
+    // Add this method to update building markers on the minimap
+    updateBuildingMarkers() {
+        // Early return if minimap doesn't exist or we're in an interior
+        if (!this.minimap || this.isInterior) return;
+        
+        // Early return if buildings group doesn't exist
+        if (!this.buildings) return;
+        
+        const buildings = this.buildings.getChildren();
+        
+        // Remove excess markers
+        if (this.buildingMarkers) {
+            while (this.buildingMarkers.length > buildings.length) {
+                const marker = this.buildingMarkers.pop();
+                marker.destroy();
+            }
+        } else {
+            this.buildingMarkers = [];
+        }
+        
+        // Add new markers if needed
+        while (this.buildingMarkers.length < buildings.length) {
+            const marker = this.add.rectangle(0, 0, 6, 6, 0x8B4513, 1); // Brown rectangle for buildings
+            this.minimapContainer.add(marker);
+            this.buildingMarkers.push(marker);
+        }
+        
+        // Update positions
+        for (let i = 0; i < buildings.length; i++) {
+            const building = buildings[i];
+            const marker = this.buildingMarkers[i];
+            
+            // Skip inactive buildings
+            if (!building.active) {
+                marker.setVisible(false);
+                continue;
+            }
+            
+            marker.setVisible(true);
+            
+            // Calculate position on minimap
+            const x = this.minimap.centerX + ((building.x / this.physics.world.bounds.width) - 0.5) * (this.minimap.width * 0.9);
+            const y = this.minimap.centerY + ((building.y / this.physics.world.bounds.height) - 0.5) * (this.minimap.height * 0.9);
+            
+            marker.setPosition(x, y);
+        }
+    }
+
+    createExitDoor() {
+        // Create a larger exit door at the bottom of the screen
+        this.exitDoor = this.add.rectangle(
+            this.game.config.width / 2,
+            this.game.config.height - 50,
+            100, // Wider door
+            100, // Taller door
+            0x553311
+        ).setScrollFactor(0);
+        
+        // Make the door more visible with a border
+        this.exitDoorBorder = this.add.rectangle(
+            this.game.config.width / 2,
+            this.game.config.height - 50,
+            104, // Slightly larger than the door
+            104,
+            0xffcc00
+        ).setScrollFactor(0);
+        this.exitDoorBorder.setStrokeStyle(4, 0xffcc00, 1);
+        this.exitDoorBorder.setDepth(-1); // Behind the door
+        
+        // Add a more visible sign above the door
+        this.exitSign = this.add.text(
+            this.game.config.width / 2,
+            this.game.config.height - 120, // Higher position
+            'EXIT',
+            {
+                fontSize: '24px', // Larger text
+                fontFamily: 'Arial',
+                fontWeight: 'bold',
+                fill: '#ffffff',
+                backgroundColor: '#000000',
+                padding: { x: 10, y: 5 }
+            }
+        ).setOrigin(0.5).setScrollFactor(0);
+        
+        // Add a pulsing effect to the sign
+        this.tweens.add({
+            targets: this.exitSign,
+            scale: 1.1,
+            duration: 800,
+            yoyo: true,
+            repeat: -1
+        });
+        
+        // Create a much larger interaction zone
+        this.exitZone = this.add.zone(
+            this.game.config.width / 2,
+            this.game.config.height - 50,
+            200, // Much wider zone
+            200  // Much taller zone
+        ).setScrollFactor(0);
+        
+        this.physics.world.enable(this.exitZone);
+        this.exitZone.body.setAllowGravity(false);
+        this.exitZone.body.moves = false;
+        
+        // Add overlap detection
+        this.physics.add.overlap(
+            this.penguin,
+            this.exitZone,
+            this.handleExitOverlap,
+            null,
+            this
+        );
+        
+        // Add a permanent exit prompt that's always visible
+        this.showExitPrompt();
+        
+        // Add a helper arrow pointing to the exit
+        this.exitArrow = this.add.triangle(
+            this.game.config.width / 2,
+            this.game.config.height - 160,
+            0, -15,
+            15, 15,
+            -15, 15,
+            0xffcc00
+        ).setScrollFactor(0);
+        
+        // Make the arrow bounce
+        this.tweens.add({
+            targets: this.exitArrow,
+            y: this.exitArrow.y - 10,
+            duration: 600,
+            yoyo: true,
+            repeat: -1
+        });
+    }
+
+    handleExitOverlap() {
+        // Make sure all required elements exist
+        if (!this.exitDoor || !this.exitPrompt) return;
+        
+        // Make the exit door highlight when player is in range
+        if (!this.exitHighlighted) {
+            this.exitHighlighted = true;
+            this.exitDoor.setFillStyle(0x996633); // Lighter color when highlighted
+            
+            // Make the prompt more noticeable
+            this.exitPrompt.setBackgroundColor('#ff0000');
+            this.exitPrompt.setColor('#ffffff');
+        }
+        
+        // Allow exit with any key press (E or SPACE)
+        if ((this.keys.pickup.isDown || this.keys.slide.isDown) && !this.exitKeyPressed) {
+            this.exitKeyPressed = true;
+            console.log("Exit key pressed - returning to iceberg");
+            this.exitBuilding();
+        }
+        
+        if (!this.keys.pickup.isDown && !this.keys.slide.isDown) {
+            this.exitKeyPressed = false;
+        }
+    }
+
+    showExitPrompt() {
+        this.exitPrompt = this.add.text(
+            this.game.config.width / 2,
+            this.game.config.height - 180,
+            'Press E or SPACE to exit',
+            {
+                fontSize: '18px',
+                fontFamily: 'Arial',
+                fontWeight: 'bold',
+                fill: '#ffcc00',
+                backgroundColor: '#000000',
+                padding: { x: 8, y: 4 },
+                stroke: '#000000',
+                strokeThickness: 2
+            }
+        ).setOrigin(0.5).setScrollFactor(0);
+        
+        // Add a small bounce animation
+        this.tweens.add({
+            targets: this.exitPrompt,
+            y: this.exitPrompt.y - 5,
+            duration: 800,
+            yoyo: true,
+            repeat: -1
+        });
+    }
+
+    // We don't need this method anymore since the prompt is always visible
+    hideExitPrompt() {
+        // Method kept for compatibility but doesn't do anything
+    }
+
+    exitBuilding() {
+        console.log(`Exiting building to iceberg`);
+        
+        // Resume the parent scene (iceberg)
+        this.scene.resume(this.parentSceneKey);
+        
+        // Stop this interior scene
+        this.scene.stop();
+    }
+
+    // Add this method to get scene type text
+    getSceneTypeText() {
+        if (this.isInterior) {
+            return `INTERIOR: ${this.getBuildingTypeName()} (Difficulty: ${this.difficultyRating})`;
+        } else {
+            return `ICEBERG: Node ${this.currentNodeId} (Difficulty: ${this.difficultyRating})`;
+        }
+    }
+
+    // Add this method to get building type name
+    getBuildingTypeName() {
+        return this.buildingType === 'shop' ? 'SHOP' : 'STANDARD BUILDING';
+    }
+
+    // Add this method to customize the interior based on building type
+    customizeInterior() {
+        // Change background color based on building type
+        if (this.buildingType === 'shop') {
+            this.cameras.main.setBackgroundColor('#2c3e50');
+            this.addShopDecorations(this.physics.world.bounds.width, this.physics.world.bounds.height);
+        } else {
+            // Standard building
+            this.cameras.main.setBackgroundColor('#34495e');
+            this.addStandardDecorations(this.physics.world.bounds.width, this.physics.world.bounds.height);
+        }
+    }
+
+    // Add this method to create decorations based on building type
+    addBuildingDecorations() {
+        const worldWidth = this.physics.world.bounds.width;
+        const worldHeight = this.physics.world.bounds.height;
+        
+        switch (this.buildingType) {
+            case 'shop':
+                this.addShopDecorations(worldWidth, worldHeight);
+                break;
+            case 'elite':
+                this.addEliteDecorations(worldWidth, worldHeight);
+                break;
+            case 'armory':
+                this.addArmoryDecorations(worldWidth, worldHeight);
+                break;
+            case 'laboratory':
+                this.addLabDecorations(worldWidth, worldHeight);
+                break;
+            default:
+                this.addStandardDecorations(worldWidth, worldHeight);
+                break;
+        }
+    }
+
+    // Add decoration methods for each building type
+    addShopDecorations(width, height) {
+        // Add shop counters along the walls
+        for (let i = 0; i < 3; i++) {
+            const counter = this.add.rectangle(
+                100 + i * 200, 
+                height - 100, 
+                150, 
+                40, 
+                0x8B4513
+            );
+            this.physics.add.existing(counter, true);
+            this.physics.add.collider(this.penguin, counter);
+            this.physics.add.collider(this.enemies, counter);
+        }
+        
+        // Add a shop sign
+        const shopSign = this.add.text(
+            width / 2,
+            50,
+            'SHOP',
+            {
+                fontSize: '32px',
+                fontFamily: 'Arial',
+                fill: '#ffffff',
+                stroke: '#000000',
+                strokeThickness: 4
+            }
+        ).setOrigin(0.5);
+    }
+
+    addEliteDecorations(width, height) {
+        // Add fancy furniture
+        const table = this.add.rectangle(
+            width / 2, 
+            height / 2, 
+            120, 
+            80, 
+            0x8B0000
+        );
+        this.physics.add.existing(table, true);
+        this.physics.add.collider(this.penguin, table);
+        this.physics.add.collider(this.enemies, table);
+    }
+
+    addArmoryDecorations(width, height) {
+        // Add weapon racks
+        for (let i = 0; i < 3; i++) {
+            const rack = this.add.rectangle(
+                100 + i * 200, 
+                100, 
+                150, 
+                30, 
+                0x5D4037
+            );
+            this.physics.add.existing(rack, true);
+            this.physics.add.collider(this.penguin, rack);
+            this.physics.add.collider(this.enemies, rack);
+        }
+    }
+
+    addLabDecorations(width, height) {
+        // Add lab tables
+        for (let i = 0; i < 2; i++) {
+            const table = this.add.rectangle(
+                width / 3 + i * (width / 3), 
+                height / 2, 
+                200, 
+                80, 
+                0xECF0F1
+            );
+            this.physics.add.existing(table, true);
+            this.physics.add.collider(this.penguin, table);
+            this.physics.add.collider(this.enemies, table);
+        }
+    }
+
+    addStandardDecorations(width, height) {
+        // Add some basic furniture
+        const table = this.add.rectangle(
+            width / 2, 
+            height / 2, 
+            100, 
+            60, 
+            0x8B4513
+        );
+        this.physics.add.existing(table, true);
+        this.physics.add.collider(this.penguin, table);
+        this.physics.add.collider(this.enemies, table);
+        
+        // Add a room sign
+        const roomSign = this.add.text(
+            width / 2,
+            50,
+            'COMBAT ROOM',
+            {
+                fontSize: '32px',
+                fontFamily: 'Arial',
+                fill: '#ffffff',
+                stroke: '#000000',
+                strokeThickness: 4
+            }
+        ).setOrigin(0.5);
     }
 }

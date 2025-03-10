@@ -11,22 +11,19 @@ class MeleeEnemy extends Enemy {
         });
         
         // Make it smaller
-        this.setScale(0.8);
+        this.setScale(1.2);
         
         // Add a unique tint to distinguish it
         this.setTint(0xff9999);
         
-        // Add some particle effects for speed visualization
-        this.particles = scene.add.particles('sparkTexture');
-        this.emitter = this.particles.createEmitter({
-            speed: 20,
-            scale: { start: 0.2, end: 0 },
-            blendMode: 'ADD',
-            lifespan: 200,
-            frequency: 50,
-            tint: 0xff0000,
-            on: false
-        });
+        // Replace particle emitter with a simpler visual effect
+        // Create a trail effect using graphics instead of particles
+        this.trail = scene.add.graphics();
+        this.trail.setDepth(1); // Set below the enemy
+        
+        // Store previous positions for trail effect
+        this.previousPositions = [];
+        this.maxTrailLength = 5;
         
         // Custom animation for faster movement
         scene.anims.create({
@@ -40,21 +37,44 @@ class MeleeEnemy extends Enemy {
     update(player, time) {
         super.update(player, time);
         
-        // Update particle emitter position
-        if (this.emitter) {
-            this.emitter.setPosition(this.x, this.y + 10);
-            
-            // Only emit particles when moving
-            if (this.body.velocity.length() > 50) {
-                this.emitter.on = true;
-            } else {
-                this.emitter.on = false;
-            }
-        }
-        
-        // Use custom animation when moving
+        // Store current position for trail effect
         if (this.body.velocity.length() > 50) {
+            // Only add to trail when moving
+            this.previousPositions.unshift({ x: this.x, y: this.y });
+            
+            // Limit trail length
+            if (this.previousPositions.length > this.maxTrailLength) {
+                this.previousPositions.pop();
+            }
+            
+            // Draw trail
+            this.updateTrail();
+            
+            // Use custom animation when moving
             this.play('melee_enemy_run', true);
+        } else {
+            // Clear trail when not moving
+            this.previousPositions = [];
+            this.trail.clear();
+        }
+    }
+    
+    updateTrail() {
+        // Clear previous trail
+        this.trail.clear();
+        
+        // Draw new trail
+        if (this.previousPositions.length > 1) {
+            for (let i = 0; i < this.previousPositions.length - 1; i++) {
+                const alpha = 0.7 * (1 - i / this.previousPositions.length);
+                const thickness = 8 * (1 - i / this.previousPositions.length);
+                
+                this.trail.lineStyle(thickness, 0xff9999, alpha);
+                this.trail.beginPath();
+                this.trail.moveTo(this.previousPositions[i].x, this.previousPositions[i].y);
+                this.trail.lineTo(this.previousPositions[i+1].x, this.previousPositions[i+1].y);
+                this.trail.strokePath();
+            }
         }
     }
 
@@ -98,9 +118,22 @@ class MeleeEnemy extends Enemy {
     
     die() {
         // Add special death effect for fast enemy
-        if (this.emitter) {
-            this.emitter.explode(20, this.x, this.y);
-            this.emitter.on = false;
+        // Create a simple explosion effect instead of using particles
+        const explosionSize = 30;
+        const explosionCircle = this.scene.add.circle(this.x, this.y, explosionSize, 0xff9999, 0.8);
+        
+        // Animate the explosion
+        this.scene.tweens.add({
+            targets: explosionCircle,
+            radius: explosionSize * 2,
+            alpha: 0,
+            duration: 300,
+            onComplete: () => explosionCircle.destroy()
+        });
+        
+        // Clear the trail
+        if (this.trail) {
+            this.trail.clear();
         }
         
         // Call the parent die method
