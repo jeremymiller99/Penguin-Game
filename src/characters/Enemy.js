@@ -219,33 +219,3 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         //scene.updateBackgroundMusic();
     }
 }
-
-class MeleeEnemy extends Enemy {
-    constructor(scene, x, y) {
-        super(scene, x, y);
-        
-        // Increase speed but reduce health for more interesting gameplay
-        this.moveSpeed = 120; // Faster than base enemies
-        this.attackDamage = 15;
-        this.maxHealth = Math.ceil(25 * (scene.enemyHealthMultiplier || 1.0));
-        this.health = this.maxHealth;
-    }
-}
-
-class RangedEnemy extends Enemy {
-    constructor(scene, x, y) {
-        super(scene, x, y);
-        
-        // Slower but with better range
-        this.moveSpeed = 80;
-        this.attackRange = 250; // Increased range
-        this.maxHealth = Math.ceil(20 * (scene.enemyHealthMultiplier || 1.0));
-        this.health = this.maxHealth;
-        
-        // Set gun properties for better balance
-        if (this.gun) {
-            this.gun.fireRate = 800; // Slower fire rate
-            this.gun.bulletSpeed = 300; // Easier to dodge bullets
-        }
-    }
-} 

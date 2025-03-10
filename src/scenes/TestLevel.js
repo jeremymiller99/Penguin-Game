@@ -400,8 +400,8 @@ class TestLevel extends Phaser.Scene {
         // Create perk UI
         this.createPerkUI();
 
-        // Add this line after spawnLevelEntities() is called
-        this.spawnBuildings();
+        // Comment out ALL building-related code
+        // this.spawnBuildings();
         
         // If returning from a building, position the player at the return position
         if (this.returningFromBuilding && this.returnPosition) {
@@ -412,18 +412,18 @@ class TestLevel extends Phaser.Scene {
             this.cameras.main.startFollow(this.penguin, true, 0.09, 0.09);
         }
 
-        // Only spawn buildings if we're not inside a building
-        if (!this.isInterior) {
-            console.log("On iceberg - spawning buildings");
-            this.spawnBuildings();
-        } else {
-            console.log("Inside building - not spawning additional buildings");
-            // If this is a building interior, add an exit door
-            this.createExitDoor();
-            
-            // Customize the interior based on building type
-            this.customizeInterior();
-        }
+        // Comment out ALL building-related code including the conditional checks
+        // if (!this.isInterior) {
+        //     console.log("On iceberg - spawning buildings");
+        //     this.spawnBuildings();
+        // } else {
+        //     console.log("Inside building - not spawning additional buildings");
+        //     // If this is a building interior, add an exit door
+        //     this.createExitDoor();
+        //     
+        //     // Customize the interior based on building type
+        //     this.customizeInterior();
+        // }
     }
 
     createMinimap(worldWidth, worldHeight) {
