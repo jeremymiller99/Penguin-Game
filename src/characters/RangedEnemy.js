@@ -23,6 +23,11 @@ class RangedEnemy extends Enemy {
         this.gun.fireDelay = 1500; // Slower firing rate than player
         this.gun.bulletSpeed = 300; // Slower bullets that player can dodge
         
+        // Set the gun sprite to be visible and use the same sprite as player
+        this.gun.gunSprite.setTexture('ak47');
+        this.gun.gunSprite.setScale(1.5);
+        this.gun.gunSprite.setVisible(true);
+        
         // Create a laser sight
         this.laserSight = scene.add.graphics();
         this.laserSight.setDepth(5);
@@ -86,7 +91,10 @@ class RangedEnemy extends Enemy {
                 // Delay the shot to give player time to dodge
                 this.scene.time.delayedCall(400, () => {
                     if (this.active && this.gun && this.gun.active) {
+                        // Set isFiring to true to make the gun fire
+                        this.gun.isFiring = true;
                         this.gun.fire(time);
+                        this.gun.isFiring = false;
                         this.lastAttackTime = time;
                         
                         // Hide targeting circle after firing

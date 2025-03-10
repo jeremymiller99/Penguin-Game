@@ -950,6 +950,9 @@ class TestLevel extends Phaser.Scene {
     }
 
     handleBulletEnemyCollision(bullet, enemy) {
+        // Check if bullet and enemy are valid
+        if (!bullet || !bullet.active || !enemy || !enemy.active) return;
+        
         bullet.destroy();
         
         // Check for explosive rounds perk
@@ -979,33 +982,39 @@ class TestLevel extends Phaser.Scene {
         // Add collision between enemy bullets and player
         if (enemy instanceof RangedEnemy && enemy.gun) {
             this.physics.add.collider(enemy.gun.bullets, this.penguin, (penguin, bullet) => {
-                // Check for invulnerability
-                if (!penguin.isInvulnerable) {
-                    bullet.destroy();
-                    penguin.health -= enemy.attackDamage;
-                    
-                    // Play sound effect
-                    this.sound.play('hit', {
-                        volume: 0.4,
-                        rate: 0.8 + Math.random() * 0.4
-                    });
+                if (!bullet || !bullet.active) return;
+                
+                bullet.destroy();
+                penguin.health -= enemy.damage;
+                this.sound.play('hit', {
+                    volume: 0.4,
+                    rate: 0.8 + Math.random() * 0.4
+                });
 
-                    // Apply visual feedback
-                    penguin.setTint(0xff0000);
-                    this.time.delayedCall(100, () => {
-                        penguin.clearTint();
-                    });
-                } else {
-                    // Still destroy the bullet but no damage
-                    bullet.destroy();
-                    
-                    // Play a "dodge" sound effect
-                    this.sound.play('dodge', {
-                        volume: 0.3,
-                        rate: 1.2
-                    });
-                }
+                // Apply visual feedback
+                penguin.setTint(0xff0000);
+                this.time.delayedCall(100, () => {
+                    penguin.clearTint();
+                });
             });
+            
+            // Add collision between enemy bullets and crates
+            this.physics.add.collider(enemy.gun.bullets, this.crates, (bullet, crate) => {
+                if (!bullet || !bullet.active || !crate || !crate.active) return;
+                
+                bullet.destroy();
+                crate.takeDamage(enemy.damage / 2);
+            });
+            
+            // Add collision between enemy bullets and barrels
+            if (this.barrels) {
+                this.physics.add.collider(enemy.gun.bullets, this.barrels, (bullet, barrel) => {
+                    if (!bullet || !bullet.active || !barrel || !barrel.active) return;
+                    
+                    bullet.destroy();
+                    barrel.takeDamage(enemy.damage);
+                });
+            }
         }
     }
 
@@ -1068,6 +1077,8 @@ class TestLevel extends Phaser.Scene {
         // Handle ranged enemy bullets
         if (enemy instanceof RangedEnemy && enemy.gun) {
             this.physics.add.collider(enemy.gun.bullets, this.penguin, (penguin, bullet) => {
+                if (!bullet || !bullet.active) return;
+                
                 bullet.destroy();
                 penguin.health -= enemy.damage;
                 this.sound.play('hit', {
@@ -1084,9 +1095,21 @@ class TestLevel extends Phaser.Scene {
             
             // Add collision between enemy bullets and crates
             this.physics.add.collider(enemy.gun.bullets, this.crates, (bullet, crate) => {
+                if (!bullet || !bullet.active || !crate || !crate.active) return;
+                
                 bullet.destroy();
                 crate.takeDamage(enemy.damage / 2);
             });
+            
+            // Add collision between enemy bullets and barrels
+            if (this.barrels) {
+                this.physics.add.collider(enemy.gun.bullets, this.barrels, (bullet, barrel) => {
+                    if (!bullet || !bullet.active || !barrel || !barrel.active) return;
+                    
+                    bullet.destroy();
+                    barrel.takeDamage(enemy.damage);
+                });
+            }
         }
         
         return enemy;
