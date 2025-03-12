@@ -11,6 +11,35 @@ class Crate extends Phaser.Physics.Arcade.Sprite {
         this.body.setDrag(0.5);
         this.body.setBounce(1);
         this.body.setMass(1);
+        
+        // Add health property
+        this.health = 100;
+        this.maxHealth = 100;
+    }
+    
+    // Add takeDamage method
+    takeDamage(amount) {
+        this.health -= amount;
+        
+        // Flash effect when taking damage
+        this.scene.tweens.add({
+            targets: this,
+            alpha: 0.5,
+            duration: 50,
+            yoyo: true,
+            repeat: 1,
+            onComplete: () => {
+                this.setAlpha(1);
+            }
+        });
+        
+        // Check if destroyed
+        if (this.health <= 0) {
+            // The explode method will be called by the scene
+            return true; // Return true to indicate the crate was destroyed
+        }
+        
+        return false; // Return false to indicate the crate survived
     }
 
     explode() {
@@ -25,8 +54,21 @@ class Crate extends Phaser.Physics.Arcade.Sprite {
 
         // Play explosion sound
         scene.sound.play('explosion', {
-            volume: 0.4,
+            volume: 0.5,  // Slightly louder
             rate: 0.8 + Math.random() * 0.4
+        });
+        
+        // Add screen shake
+        scene.cameras.main.shake(200, 0.01);
+        
+        // Create shockwave effect
+        const shockwave = scene.add.circle(this.x, this.y, 10, 0xffffff, 0.4);
+        scene.tweens.add({
+            targets: shockwave,
+            radius: 350,
+            alpha: 0,
+            duration: 300,
+            onComplete: () => shockwave.destroy()
         });
 
         // Create explosion effect
@@ -73,6 +115,32 @@ class Crate extends Phaser.Physics.Arcade.Sprite {
                     });
                 });
             }
+        }
+        
+        // Add smoke particles
+        for (let i = 0; i < particleCount / 2; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 50 + Math.random() * 50;
+            const distance = Math.random() * 20;
+            const size = 3 + Math.random() * 5;
+            
+            const smoke = scene.add.circle(
+                this.x + Math.cos(angle) * distance,
+                this.y + Math.sin(angle) * distance,
+                size,
+                0x333333,
+                0.7
+            );
+            
+            scene.tweens.add({
+                targets: smoke,
+                x: smoke.x + Math.cos(angle) * speed,
+                y: smoke.y + Math.sin(angle) * speed,
+                alpha: 0,
+                scale: 2 + Math.random(),
+                duration: 500 + Math.random() * 500,
+                onComplete: () => smoke.destroy()
+            });
         }
     }
 }

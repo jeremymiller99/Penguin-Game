@@ -84,10 +84,11 @@ class Gun extends Phaser.GameObjects.Container {
     update(time) {
         if (!this.player) return;
 
-        // Always update position and rotation, regardless of reload state
+        // Always update position to follow player
         this.setPosition(this.player.x, this.player.y);
 
-        // Handle rotation based on control type
+        // Only handle rotation for AI-controlled guns
+        // For player guns, rotation is handled by the scene
         if (this.isAIControlled) {
             const player = this.scene.penguin;
             if (player) {
@@ -96,13 +97,9 @@ class Gun extends Phaser.GameObjects.Container {
                     player.x, player.y
                 );
             }
-        } else {
-            const pointer = this.scene.input.activePointer;
-            this.rotation = Phaser.Math.Angle.Between(
-                this.x, this.y,
-                pointer.worldX, pointer.worldY
-            );
         }
+        // Note: We don't set rotation for player-controlled guns here
+        // That's now handled in the scene's update method
 
         this.gunSprite.flipY = Math.abs(this.rotation) > Math.PI / 2;
 

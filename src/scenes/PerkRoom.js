@@ -79,8 +79,8 @@ class PerkRoom extends Phaser.Scene {
             .setStrokeStyle(3, this.getRarityColor(perk.rarity))
             .setInteractive({ useHandCursor: true });
             
-        // Perk icon
-        const icon = this.add.sprite(x - 170, y, perk.icon || 'default_perk_icon').setScale(2);
+        // Perk icon - use the animation key instead of direct image
+        const icon = this.add.sprite(x - 170, y, 'perk_icons', this.perkIconFrame(perk.icon)).setScale(2);
         
         // Perk name
         const nameText = this.add.text(x - 100, y - 50, perk.name, {
@@ -115,6 +115,25 @@ class PerkRoom extends Phaser.Scene {
         
         // Click event
         card.on('pointerdown', callback);
+    }
+    
+    // Helper function to get the frame number for a perk icon
+    perkIconFrame(iconName) {
+        const frameMap = {
+            'default_perk_icon': 0,
+            'perk_rapid_fire': 1,
+            'perk_heavy_bullets': 2,
+            'perk_explosive_rounds': 3,
+            'perk_quick_slide': 4,
+            'perk_speed_boost': 5,
+            'perk_vitality': 6,
+            'perk_vampirism': 7,
+            'perk_double_cash': 8,
+            'perk_barrel_master': 9,
+            'perk_enemy_weakener': 10
+        };
+        
+        return frameMap[iconName] || 0; // Default to frame 0 if not found
     }
     
     getRarityColor(rarity, isText = false) {

@@ -63,6 +63,17 @@ class Map extends Phaser.Scene {
         if (!this.currentNode) {
             this.startFTUESequence();
         }
+
+        const gameMap = this.registry.get('gameMap');
+        const currentNodeId = gameMap?.currentNode || '0-0'; // Default to start node if not set
+        const currentNode = this.nodes.find(node => node.id === currentNodeId);
+
+        if (currentNode) {
+            // Position the penguin marker at the current node
+            this.penguinMarker = this.add.sprite(currentNode.position.x, currentNode.position.y - 15, 'penguin')
+                .setScale(2)
+                .play('idle');
+        }
     }
 
     createOceanBackground() {
@@ -779,7 +790,7 @@ class Map extends Phaser.Scene {
                             difficultyRating: node.difficultyRating
                         });
                     } else {
-                        this.scene.start('TestLevel', { 
+                        this.scene.start('GameManager', { 
                             nodeId: node.id, 
                             nodeType: node.type,
                             difficultyRating: node.difficultyRating
@@ -863,7 +874,7 @@ class Map extends Phaser.Scene {
 
         button.on('pointerover', () => button.setScale(1.1));
         button.on('pointerout', () => button.setScale(1));
-        button.on('pointerdown', () => this.scene.start('TestLevel'));
+        button.on('pointerdown', () => this.scene.start('GameManager'));
     }
 
     getNodeState(node) {
@@ -1321,7 +1332,7 @@ class Map extends Phaser.Scene {
             });
             
             // Start the first level
-            this.scene.start('TestLevel', {
+            this.scene.start('GameManager', {
                 nodeId: '0-0',
                 nodeType: 'BATTLE',
                 difficultyRating: 1

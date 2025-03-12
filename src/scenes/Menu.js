@@ -81,22 +81,9 @@ class Menu extends Phaser.Scene {
             ease: 'Sine.InOut'
         });
 
-        // Show high score with enhanced styling
-        const highScore = this.scene.get('TestLevel').getHighScore() || 0;
-        const recordText = this.add.text(centerX, centerY + 225, 
-            `HIGHEST FLOOR REACHED: ${highScore}`, {
-            fontSize: '28px',
-            fill: '#ffd700',
-            fontFamily: 'Courier',
-            fontStyle: 'bold',
-            stroke: '#b8860b',
-            strokeThickness: 4,
-            shadow: { offsetX: 2, offsetY: 2, color: '#b8860b', blur: 3, fill: true }
-        }).setOrigin(0.5).setAlpha(0);
-
         // Enhanced fade in with scale effect
         this.tweens.add({
-            targets: [headerText, recordText],
+            targets: [headerText],
             alpha: 1,
             scale: { from: 0.5, to: 1 },
             duration: 1200,
@@ -266,7 +253,7 @@ class Menu extends Phaser.Scene {
                 'Programming - Jeremy Miller\n' +
                 'Art - Jeremy Miller\n' +
                 'Design - Jeremy Miller\n' +
-                'Music & Sound - Jeremy Miller\n\n' +
+                'Music - Bartek\n\n' +
                 'Shoutout Cameron\n' +
                 'for testing and feedback\n\n' +
                 'Made for CM120,\n taught by Nathan Altice', {

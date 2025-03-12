@@ -12,11 +12,11 @@ let config = {
     physics: {
         default: 'arcade',
         arcade: {
-            debug: false,
+            debug: true,
             gravity: { x: 0, y: 0 }
         }
     },
-    scene: [Load, Menu, Briefing, Cutscene, Map, TestLevel, PerkRoom, BuildingInterior]
+    scene: [Load, Menu, Briefing, Cutscene, Map, GameManager, BaseMapScene, Map1Scene, IcebergMapScene, PerkRoom]
 };
 
 let game = new Phaser.Game(config);

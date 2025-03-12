@@ -1,0 +1,34 @@
+{
+    "Map/SizeTest": {
+        "height": 4300,
+        "width": 2
+    },
+    "activeFile": "map1.tmx",
+    "expandedProjectPaths": [
+    ],
+    "fileStates": {
+        "map1.tmx": {
+            "scale": 0.9519791666666667,
+            "selectedLayer": 1,
+            "viewCenter": {
+                "x": 480.0525221577853,
+                "y": 320.3851624904257
+            }
+        },
+        "map1.tmx#iceberg_tileset": {
+            "scaleInDock": 1
+        }
+    },
+    "last.exportedFilePath": "C:/Users/jjmil/OneDrive/Desktop/JS/Penguin Game/assets/tilesets",
+    "last.imagePath": "C:/Users/jjmil/Downloads",
+    "map.lastUsedExportFilter": "All Files (*)",
+    "map.lastUsedFormat": "tmx",
+    "openFiles": [
+        "map1.tmx"
+    ],
+    "project": "Maps.tiled-project",
+    "recentFiles": [
+        "map1.tmx"
+    ],
+    "tileset.embedInMap": true
+}

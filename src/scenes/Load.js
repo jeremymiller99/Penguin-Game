@@ -6,7 +6,7 @@ class Load extends Phaser.Scene {
     preload() {
         this.load.spritesheet('penguin', './assets/penguin.png', { frameWidth: 16, frameHeight: 16 });
         this.load.image('ak47', './assets/ak47.png');
-        this.load.image('crate', './assets/oildrum.png');
+        this.load.image('barrel', './assets/oildrum.png');
         this.load.image('cash', './assets/cash.png');
         this.load.image('ladder', './assets/ladder.png');
         this.load.image('shop_open', './assets/shop_open.png');
@@ -32,14 +32,24 @@ class Load extends Phaser.Scene {
         muzzleFlashGraphics.fillStyle(0xFFFF00).fillCircle(0, 0, 5).generateTexture('muzzleFlash', 10, 10).destroy();
 
         // Load tileset image first
-        this.load.image('bg_tileset', './assets/bg_tileset.png');
+        this.load.image('bg_tileset', './assets/tilesets/bg_tileset.png');
+        this.load.image('iceberg_tileset', './assets/tilesets/iceberg_tileset.png');
+        this.load.image('iceberg_tileset_1', './assets/tilesets/iceberg_tileset_1.png');
         
         // Then load the tilemap JSON
-        this.load.tilemapTiledJSON('test_map', './assets/test_map.json');
-        this.load.tilemapTiledJSON('test_map_1', './assets/test_map_1.json');
-        this.load.tilemapTiledJSON('test_map_2', './assets/test_map_2.json');
-        this.load.tilemapTiledJSON('test_map_3', './assets/test_map_3.json');
+        this.load.tilemapTiledJSON('test_map', './assets/tilesets/test_map.json');
+        this.load.tilemapTiledJSON('test_map_1', './assets/tilesets/test_map_1.json');
+        this.load.tilemapTiledJSON('test_map_2', './assets/tilesets/test_map_2.json');
+        this.load.tilemapTiledJSON('test_map_3', './assets/tilesets/test_map_3.json');
+        this.load.tilemapTiledJSON('iceberg_map', './assets/tilesets/iceberg_1.json');
+        this.load.tilemapTiledJSON('iceberg_map_1', './assets/tilesets/iceberg_2.json');
+
+        // Load new tileset image for map1
+        this.load.image('map1_tileset', './assets/tilesets/map1_tileset.png');
         
+        // Load the new tilemap JSON
+        this.load.tilemapTiledJSON('map1', './assets/tilesets/map1.json');
+
         // Add a load error handler to debug any loading issues
         this.load.on('loaderror', (fileObj) => {
             console.error('Error loading:', fileObj.src);
@@ -71,18 +81,13 @@ class Load extends Phaser.Scene {
         this.load.image('cs_mountain_bg', './assets/cutscene/mountain_bg.png');
         this.load.image('cs_plane', './assets/cutscene/plane.png');
 
-        // Perk icons
-        this.load.image('default_perk_icon', 'assets/images/perks/default_perk.png');
-        this.load.image('perk_rapid_fire', 'assets/images/perks/rapid_fire.png');
-        this.load.image('perk_heavy_bullets', 'assets/images/perks/heavy_bullets.png');
-        this.load.image('perk_explosive_rounds', 'assets/images/perks/explosive_rounds.png');
-        this.load.image('perk_quick_slide', 'assets/images/perks/quick_slide.png');
-        this.load.image('perk_speed_boost', 'assets/images/perks/speed_boost.png');
-        this.load.image('perk_vitality', 'assets/images/perks/vitality.png');
-        this.load.image('perk_vampirism', 'assets/images/perks/vampirism.png');
-        this.load.image('perk_double_cash', 'assets/images/perks/double_cash.png');
-        this.load.image('perk_barrel_master', 'assets/images/perks/barrel_master.png');
-        this.load.image('perk_enemy_weakener', 'assets/images/perks/enemy_weakener.png');
+        // Load perk sprite sheet with proper dimensions (16 columns x 22 rows)
+        this.load.spritesheet('perk_icons', 'assets/perk_temp_sheet_32.png', { 
+            frameWidth: 32, 
+            frameHeight: 32,
+            margin: 0,
+            spacing: 0
+        });
 
         // Load iceberg sprites for map nodes
         this.load.image('ice_berg_1', './assets/ice_berg_1.png');
@@ -96,8 +101,17 @@ class Load extends Phaser.Scene {
         console.log('Tilemap loaded:', this.cache.tilemap.exists('test_map'));
         console.log('Tilemap 1 loaded:', this.cache.tilemap.exists('test_map_1'));
         
+        // Create penguin animations
         this.anims.create({ key: 'idle', frames: this.anims.generateFrameNumbers('penguin', { start: 0, end: 0 }), frameRate: 8, repeat: -1 });
         this.anims.create({ key: 'walk_right', frames: this.anims.generateFrameNumbers('penguin', { start: 0, end: 3 }), frameRate: 8, repeat: -1 });
+        
+        // Create slide animation (using the same frames but faster)
+        this.anims.create({ 
+            key: 'penguin_slide', 
+            frames: this.anims.generateFrameNumbers('penguin', { start: 0, end: 3 }), 
+            frameRate: 12, // Faster animation for sliding
+            repeat: -1 
+        });
 
         // Create animations for the enemy
         this.anims.create({
@@ -117,9 +131,34 @@ class Load extends Phaser.Scene {
         // Create muzzle flash animation
         this.anims.create({
             key: 'muzzleFlash',
-            frames: this.anims.generateFrameNumbers('muzzleFlash', { start: 0, end: 0 }),
+            frames: [{ key: 'muzzleFlash' }],
             frameRate: 15,
             repeat: 0
+        });
+        
+        // Define frame mappings for perk icons
+        // Create a texture atlas for the perk icons
+        const perkIconsAtlas = {
+            'default_perk_icon': 0,
+            'perk_rapid_fire': 1,
+            'perk_heavy_bullets': 2,
+            'perk_explosive_rounds': 3,
+            'perk_quick_slide': 4,
+            'perk_speed_boost': 5,
+            'perk_vitality': 6,
+            'perk_vampirism': 7,
+            'perk_double_cash': 8,
+            'perk_barrel_master': 9,
+            'perk_enemy_weakener': 10
+        };
+        
+        // Create animations for each perk icon
+        Object.entries(perkIconsAtlas).forEach(([name, frame]) => {
+            this.anims.create({
+                key: name,
+                frames: [{ key: 'perk_icons', frame: frame }],
+                frameRate: 1
+            });
         });
 
         this.scene.start('Menu');
