@@ -7,6 +7,51 @@ class BaseMapScene extends Phaser.Scene {
         this.slideCooldown = 1000; // 1 second cooldown
         this.isGameFrozen = false;
         this.slidePulseActive = false;
+        this.slideLastUsed = 0; // Track when slide was last used
+        this.invincibilityDuration = 2000; // 2 seconds
+        this.hasBeenEntered = false; // Track if scene has been entered before
+        this.isDestroyed = false;  // Add flag to track if scene is destroyed
+        this.isBeingReset = false;  // Add flag to track if scene is being reset
+        
+        // Initialize logging system
+        this.debugLogging = true; // Set to false in production
+        this.logPrefix = `[${key}]`;
+        this.logGroups = {
+            SCENE: "🎬 SCENE",
+            PLAYER: "🐧 PLAYER",
+            ENEMIES: "👹 ENEMIES",
+            PHYSICS: "⚛️ PHYSICS",
+            ITEMS: "📦 ITEMS",
+            INPUT: "🎮 INPUT",
+            UI: "🖥️ UI",
+            LIFECYCLE: "♻️ LIFECYCLE",
+            ERROR: "❌ ERROR",
+            WARNING: "⚠️ WARNING"
+        };
+    }
+
+    // Add these logging methods to the BaseMapScene class
+    log(group, message, data) {
+        if (!this.debugLogging) return;
+        
+        const groupPrefix = this.logGroups[group] || "ℹ️ INFO";
+        const timestamp = new Date().toISOString().substr(11, 8); // HH:MM:SS
+        
+        console.log(`${timestamp} ${this.logPrefix} ${groupPrefix}: ${message}`, data || '');
+    }
+
+    logError(message, error) {
+        if (!this.debugLogging) return;
+        
+        const timestamp = new Date().toISOString().substr(11, 8);
+        console.error(`${timestamp} ${this.logPrefix} ${this.logGroups.ERROR}: ${message}`, error || '');
+    }
+
+    logWarning(message, data) {
+        if (!this.debugLogging) return;
+        
+        const timestamp = new Date().toISOString().substr(11, 8);
+        console.warn(`${timestamp} ${this.logPrefix} ${this.logGroups.WARNING}: ${message}`, data || '');
     }
 
     init(data) {
@@ -17,9 +62,29 @@ class BaseMapScene extends Phaser.Scene {
         this.nodeId = data.nodeId;
         this.nodeType = data.nodeType;
         this.difficultyRating = data.difficultyRating;
+        
+        this.log("SCENE", `Initializing with data`, {
+            mapKey: this.mapKey,
+            floorLevel: this.floorLevel,
+            currency: this.playerCurrency,
+            nodeId: this.nodeId,
+            nodeType: this.nodeType,
+            difficulty: this.difficultyRating
+        });
+        
+        // If this is the first time entering the scene, no need to reset
+        if (this.hasBeenEntered) {
+            this.log("LIFECYCLE", `Re-entering scene ${this.scene.key}, performing reset`);
+            this.resetScene();
+        } else {
+            this.log("LIFECYCLE", `First time entering scene ${this.scene.key}`);
+            this.hasBeenEntered = true;
+        }
     }
 
     create() {
+        this.log("LIFECYCLE", `Creating scene ${this.scene.key}`);
+        
         // Initialize groups for game objects
         this.initializeGroups();
         
@@ -58,6 +123,8 @@ class BaseMapScene extends Phaser.Scene {
         
         // Create whitecaps
         this.createWhitecaps();
+        
+        this.log("LIFECYCLE", `Scene creation complete`);
     }
 
     initializeGroups() {
@@ -77,7 +144,7 @@ class BaseMapScene extends Phaser.Scene {
         });
         
         // Initialize cash/collectibles group
-        this.cashItems = this.physics.add.group();
+        this.cash = this.physics.add.group();
     }
 
     createMap() {
@@ -98,48 +165,23 @@ class BaseMapScene extends Phaser.Scene {
         this.penguin = this.add.sprite(this.game.config.width / 2, this.game.config.height / 2, 'penguin').setScale(2);
         this.penguin.health = 102;  // Adjusted to survive 6 hits from basic enemies (17 damage per hit)
         this.penguin.maxHealth = 102;
+        this.penguin.isInvincible = false;
+        this.penguin.invincibilityTimer = null;
         
         // Enable physics
         this.physics.add.existing(this.penguin, false);
         this.penguin.body.setCollideWorldBounds(true);
         
         // Set physics properties for better movement
-        this.penguin.body.setDrag(600, 600); // Default drag when not sliding
-        this.penguin.body.setMaxVelocity(this.moveSpeed * 4, this.moveSpeed * 4); // Allow higher velocity during slides
-        this.penguin.body.setDamping(true); // Enable damping for smoother deceleration
+        this.penguin.body.setDrag(600, 600);
+        this.penguin.body.setMaxVelocity(this.moveSpeed * 4, this.moveSpeed * 4);
+        this.penguin.body.setDamping(true);
         
-        // Add takeDamage method to properly handle damage
+        // Add takeDamage method that uses the centralized system
         this.penguin.takeDamage = (amount) => {
-            // Only process damage if the player is alive
-            if (this.penguin.health <= 0) return;
-            
-            // Apply damage
-            this.penguin.health -= amount;
-            
-            // Show damage number
-            this.createDamageNumber(this.penguin.x, this.penguin.y, amount);
-            
-            // Ensure health doesn't go below 0
-            if (this.penguin.health < 0) {
-                this.penguin.health = 0;
-            }
-            
-            // Visual feedback
-            this.penguin.setTint(0xff0000);
-            this.time.delayedCall(100, () => {
-                this.penguin.clearTint();
-            });
-            
-            // Play hit sound
-            this.sound.play('hit', {
-                volume: 0.4,
-                rate: 0.8 + Math.random() * 0.4
-            });
-            
-            // Check for death immediately
-            if (this.penguin.health <= 0 && this.penguin.stateMachine) {
-                this.penguin.stateMachine.transition('dead');
-            }
+            if (this.penguin.health <= 0 || this.penguin.isInvincible) return;
+            this.handleDamage(this.penguin, amount);
+            this.makePlayerInvincible();
         };
         
         // Create weapon
@@ -155,6 +197,87 @@ class BaseMapScene extends Phaser.Scene {
             this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
         }
         this.cameras.main.startFollow(this.penguin, true, 0.09, 0.09);
+    }
+
+    makePlayerInvincible() {
+        if (!this.penguin) return;
+        
+        // Set invincibility flag
+        this.penguin.isInvincible = true;
+        
+        // CRITICAL: Ensure penguin stays active, visible and movable
+        this.penguin.active = true;
+        this.penguin.visible = true;
+        
+        // Make sure physics body is enabled
+        if (this.penguin.body) {
+            this.penguin.body.enable = true;
+        }
+        
+        this.log("PLAYER", "Player became invincible", { duration: this.invincibilityDuration });
+        
+        // Clear any existing invincibility timer
+        if (this.penguin.invincibilityTimer) {
+            this.penguin.invincibilityTimer.remove();
+            this.penguin.invincibilityTimer = null;
+        }
+        
+        // Clear any existing flash effect
+        if (this.penguin.invincibilityFlash) {
+            this.penguin.invincibilityFlash.remove();
+            this.penguin.invincibilityFlash = null;
+        }
+        
+        // Use tint flashing instead of alpha changes which can cause issues
+        let flashState = false;
+        this.penguin.invincibilityFlash = this.time.addEvent({
+            delay: 100, // Flash every 100ms
+            callback: () => {
+                if (this.penguin && this.penguin.active) {
+                    // Toggle tint instead of alpha
+                    flashState = !flashState;
+                    if (flashState) {
+                        this.penguin.setTint(0x99ccff); // Light blue tint for invincibility
+                    } else {
+                        this.penguin.clearTint();
+                    }
+                    
+                    // Keep alpha at full visibility
+                    this.penguin.alpha = 1;
+                    
+                    // Ensure the physics body stays enabled
+                    if (this.penguin.body) {
+                        this.penguin.body.enable = true;
+                    }
+                }
+            },
+            loop: true
+        });
+        
+        // Set timer to remove invincibility
+        this.penguin.invincibilityTimer = this.time.delayedCall(this.invincibilityDuration, () => {
+            if (this.penguin) {
+                this.penguin.isInvincible = false;
+                
+                // Clear any tint
+                this.penguin.clearTint();
+                
+                // Ensure full visibility
+                this.penguin.alpha = 1;
+                
+                // Make sure physics body is enabled
+                if (this.penguin.body) {
+                    this.penguin.body.enable = true;
+                }
+                
+                if (this.penguin.invincibilityFlash) {
+                    this.penguin.invincibilityFlash.remove();
+                    this.penguin.invincibilityFlash = null;
+                }
+                
+                this.log("PLAYER", "Player invincibility ended");
+            }
+        });
     }
 
     createPlayerWeapon() {
@@ -183,11 +306,6 @@ class BaseMapScene extends Phaser.Scene {
         
         // Initialize slide timer
         this.slideTimer = this.slideCooldown;
-        
-        // Store the last time slide was used (for cooldown)
-        this.slideLastUsed = 0;
-        
-        // The state machine will handle the slide key in its update method
         
         // Add reload key handler
         this.keys.reload.on('down', () => {
@@ -348,7 +466,7 @@ class BaseMapScene extends Phaser.Scene {
         // Set up overlap between player and cash
         this.physics.add.overlap(
             this.penguin,
-            this.cashItems,
+            this.cash,
             this.collectCash,
             null,
             this
@@ -447,7 +565,7 @@ class BaseMapScene extends Phaser.Scene {
             enemySpeedMultiplier: 1 + (floorLevel * 0.05)
         };
         
-        console.log(`Difficulty params for floor ${floorLevel}:`, params);
+        this.log("SCENE", `Difficulty params for floor ${floorLevel}:`, params);
         return params;
     }
 
@@ -479,11 +597,14 @@ class BaseMapScene extends Phaser.Scene {
         // Create the appropriate enemy type
         if (type === 'ranged') {
             enemy = new RangedEnemy(this, x, y);
+            this.log("ENEMIES", `Spawned ranged enemy at (${x}, ${y})`);
         } else if (type === 'melee') {
             enemy = new MeleeEnemy(this, x, y);
+            this.log("ENEMIES", `Spawned melee enemy at (${x}, ${y})`);
         } else {
             // Default to basic enemy
             enemy = new Enemy(this, x, y, { type: 'Basic' });
+            this.log("ENEMIES", `Spawned basic enemy at (${x}, ${y})`);
         }
         
         // Apply difficulty scaling ONLY to enemy health, not damage
@@ -494,8 +615,10 @@ class BaseMapScene extends Phaser.Scene {
             enemy.maxHealth = Math.ceil(enemy.maxHealth * healthMultiplier);
             enemy.health = enemy.maxHealth;
             
-            // No damage scaling - damage remains constant regardless of floor level
-            // This ensures consistent gameplay difficulty
+            this.log("ENEMIES", `Applied difficulty scaling to enemy`, {
+                healthMultiplier,
+                newHealth: enemy.health
+            });
         }
         
         // Add to enemies group
@@ -541,6 +664,8 @@ class BaseMapScene extends Phaser.Scene {
     }
 
     spawnLadder() {
+        this.log("ITEMS", "Attempting to spawn ladder");
+        
         // Find a valid position on a walkable tile (tile index 9)
         let x, y;
         let validPosition = false;
@@ -564,19 +689,19 @@ class BaseMapScene extends Phaser.Scene {
                 // Check if it's a walkable tile (index 9)
                 if (tile && tile.index === 9) {
                     validPosition = true;
-                    console.log(`Ladder spawned on walkable tile at (${x}, ${y}), tile coordinates (${tileX}, ${tileY})`);
+                    this.log("ITEMS", `Ladder spawned on walkable tile at (${x}, ${y}), tile coordinates (${tileX}, ${tileY})`);
                 }
             } else {
                 // If there's no background layer, just use the random position
                 validPosition = true;
-                console.log(`No background layer found, ladder spawned at random position (${x}, ${y})`);
+                this.log("ITEMS", `No background layer found, ladder spawned at random position (${x}, ${y})`);
             }
             
             attempts++;
         }
         
         if (!validPosition) {
-            console.warn(`Could not find a walkable tile for ladder after ${maxAttempts} attempts. Using last attempted position.`);
+            this.logWarning(`Could not find a walkable tile for ladder after ${maxAttempts} attempts. Using last attempted position.`);
         }
         
         // Spawn the ladder at the determined position
@@ -584,6 +709,8 @@ class BaseMapScene extends Phaser.Scene {
         
         // Add overlap with player
         this.physics.add.overlap(this.penguin, this.ladder, this.handleLevelComplete, null, this);
+        
+        this.log("ITEMS", "Ladder overlap with player configured");
     }
 
     handleCrateExplosion(crate) {
@@ -647,11 +774,11 @@ class BaseMapScene extends Phaser.Scene {
 
         // Trigger the crate explosion effects if it has an explode method
         if (typeof crate.explode === 'function') {
-            console.log('Calling crate.explode()');
+            this.log("ITEMS", "Calling crate.explode()");
             crate.explode();
         } else {
             // If no explode method, just destroy it
-            console.warn('No explode method found on crate, destroying it directly');
+            this.logWarning("ITEMS", "No explode method found on crate, destroying it directly");
             crate.destroy();
         }
         
@@ -766,7 +893,7 @@ class BaseMapScene extends Phaser.Scene {
         const cash = this.physics.add.sprite(x, y, 'icn_cash').setScale(2);
         cash.amount = amount * (1 + (this.floorLevel * 0.1)); // Scale with floor level
         
-        this.cashItems.add(cash);
+        this.cash.add(cash);
         
         // Add simple animation
         this.tweens.add({
@@ -882,17 +1009,9 @@ class BaseMapScene extends Phaser.Scene {
         // Create impact effect
         this.createBulletImpactEffect(bullet.x, bullet.y);
         
-        // Apply damage to enemy
-        if (enemy.takeDamage) {
-            const damage = bullet.damage || 15;
-            enemy.takeDamage(damage);
-            
-            // Check if enemy is dead
-            if (enemy.health <= 0) {
-                // Spawn cash when enemy dies
-                this.spawnCash(enemy.x, enemy.y, 20);
-            }
-        }
+        // Apply damage to enemy using centralized system
+        const damage = bullet.damage || 15;
+        this.handleDamage(enemy, damage);
     }
 
     createBulletImpactEffect(x, y) {
@@ -1044,14 +1163,14 @@ class BaseMapScene extends Phaser.Scene {
     }
 
     updateCashMarkers() {
-        if (!this.minimap || !this.cashItems) return;
+        if (!this.minimap || !this.cash) return;
         
         // Clear old markers
         this.cashMarkers.forEach(marker => marker.destroy());
         this.cashMarkers = [];
         
         // Create new markers for each cash item
-        this.cashItems.getChildren().forEach(cash => {
+        this.cash.getChildren().forEach(cash => {
             if (!cash.active) return;
             
             // Calculate position on minimap
@@ -1112,7 +1231,7 @@ class BaseMapScene extends Phaser.Scene {
         // Check if there's a selected perk in the game state
         const gameState = this.registry.get('gameState') || {};
         if (gameState.selectedPerk) {
-            console.log('Adding selected perk:', gameState.selectedPerk.name);
+            this.log("SCENE", `Adding selected perk: ${gameState.selectedPerk.name}`);
             
             // Create a new Perk instance from the selected perk data
             const selectedPerk = new Perk(gameState.selectedPerk);
@@ -1460,45 +1579,91 @@ class BaseMapScene extends Phaser.Scene {
     }
 
     update() {
-        // Skip updates if game is frozen
-        if (this.isGameFrozen) return;
+        // First check if the scene is being destroyed or reset
+        if (this.isBeingReset || this.isDestroyed) {
+            return;
+        }
         
-        // Update the penguin state machine
-        if (this.penguin && this.penguin.stateMachine) {
-            this.penguin.stateMachine.update();
+        try {
+            // Skip updates if game is frozen
+            if (this.isGameFrozen) return;
             
-            // Update isSliding flag based on state machine
-            this.isSliding = this.penguin.stateMachine.currentState === this.penguin.stateMachine.states.sliding;
-        }
-        
-        // Update all enemies
-        if (this.enemies && this.penguin) {
-            this.enemies.getChildren().forEach(enemy => {
-                if (enemy.active && enemy.update) {
+            // Update penguin state machine if it exists and penguin is valid
+            if (this.penguin && this.penguin.stateMachine) {
+                // CRITICAL: Verify penguin state is valid
+                this.verifyPenguinState();
+                
+                // Update state machine
+                this.penguin.stateMachine.update();
+            }
+            
+            // Move gun with penguin if it exists
+            this.updateWeapon();
+            
+            // Update all enemies
+            if (this.enemies && this.enemies.getChildren) {
+                this.enemies.getChildren().forEach(enemy => {
                     enemy.update(this.penguin, this.time.now);
+                });
+            }
+            
+            // Update slide cooldown UI
+            if (this.slideCooldownFill) {
+                this.updateSlideCooldown();
+            }
+            
+            // Update minimap if it exists
+            if (this.minimap && this.playerMarker && this.penguin) {
+                this.updateMinimap();
+            }
+            
+            // Check for player death
+            if (this.penguin && this.penguin.health <= 0 && !this.isGameFrozen) {
+                this.log("PLAYER", "Player health reached zero, triggering death sequence");
+                this.checkPlayerDeath();
+            }
+            
+            // Update perk system
+            if (this.perkManager) {
+                this.perkManager.update();
+                if (this.perkContainer) {
+                    this.updatePerkIcons(this.perkManager.activePerks);
                 }
+            }
+        } catch (error) {
+            this.logError("Error in update loop", error);
+        }
+    }
+    
+    // New method to verify and fix penguin state if needed
+    verifyPenguinState() {
+        // Skip if penguin doesn't exist
+        if (!this.penguin) return;
+        
+        // Check if penguin is in a valid state
+        const needsFixing = !this.penguin.active || !this.penguin.visible || 
+                           (this.penguin.body && !this.penguin.body.enable);
+        
+        if (needsFixing) {
+            this.log("PLAYER", "Fixing invalid penguin state", {
+                wasActive: this.penguin.active,
+                wasVisible: this.penguin.visible,
+                wasBodyEnabled: this.penguin.body ? this.penguin.body.enable : "no body"
             });
-        }
-        
-        // Update UI elements
-        this.updateHealthBar();
-        this.updateAmmoDisplay();
-        this.updateSlideCooldown();
-        
-        // Update minimap if it exists
-        if (this.minimap) {
-            this.updateMinimap();
-        }
-        
-        // Check for player death
-        if (this.penguin && this.penguin.health <= 0) {
-            this.checkPlayerDeath();
-        }
-        
-        // Update perk system
-        if (this.perkManager) {
-            this.perkManager.update();
-            this.updatePerkIcons(this.perkManager.activePerks);
+            
+            // Fix the penguin state
+            this.penguin.active = true;
+            this.penguin.visible = true;
+            
+            // Keep alpha reasonable
+            if (this.penguin.alpha < 0.5) {
+                this.penguin.alpha = 1;
+            }
+            
+            // Fix physics body
+            if (this.penguin.body) {
+                this.penguin.body.enable = true;
+            }
         }
     }
 
@@ -1546,10 +1711,28 @@ class BaseMapScene extends Phaser.Scene {
     }
 
     calculateVelocity() {
+        // Define a zero velocity object
         const velocity = { x: 0, y: 0 };
         
+        // If game is frozen or penguin is invalid, don't allow movement
+        if (this.isGameFrozen || !this.penguin || !this.penguin.active) {
+            return velocity;
+        }
+        
         // If sliding, don't change velocity
-        if (this.isSliding) return velocity;
+        if (this.isSliding) {
+            return velocity;
+        }
+        
+        // Make sure keys are available
+        if (!this.keys) {
+            this.logWarning("Input keys not available in calculateVelocity");
+            return velocity;
+        }
+        
+        // Check if any movement keys are pressed
+        const inputActive = this.keys.left.isDown || this.keys.right.isDown || 
+                           this.keys.up.isDown || this.keys.down.isDown;
         
         // Calculate velocity based on input
         if (this.keys.left.isDown) {
@@ -1571,133 +1754,15 @@ class BaseMapScene extends Phaser.Scene {
             velocity.y = normalizedVelocity.y * this.moveSpeed;
         }
         
+        // If we're calculating non-zero velocity, make sure penguin can move
+        if (velocity.x !== 0 || velocity.y !== 0) {
+            // Ensure penguin is in a valid state to move
+            if (this.penguin && this.penguin.body) {
+                this.penguin.body.enable = true;
+            }
+        }
+        
         return velocity;
-    }
-
-    startSlide() {
-        if (!this.penguin || this.isSliding) return;
-        
-        // Play slide sound if available
-        if (this.sound.get('slide')) {
-            this.sound.play('slide', {
-                volume: 0.5,
-                rate: 1.0 + Math.random() * 0.2
-            });
-        }
-        
-        this.isSliding = true;
-        this.slideTimer = 0; // Reset the slide timer
-        
-        // Get current velocity or facing direction
-        const slideSpeed = this.moveSpeed * 1.2; // Reduced from 1.47 to 1.2 for a more controlled slide
-        let slideVelocity = { x: 0, y: 0 };
-        
-        if (this.keys.left.isDown || this.keys.right.isDown || this.keys.up.isDown || this.keys.down.isDown) {
-            // Slide in the direction of movement
-            if (this.keys.left.isDown) slideVelocity.x = -slideSpeed;
-            if (this.keys.right.isDown) slideVelocity.x = slideSpeed;
-            if (this.keys.up.isDown) slideVelocity.y = -slideSpeed;
-            if (this.keys.down.isDown) slideVelocity.y = slideSpeed;
-            
-            // Normalize diagonal movement
-            if (slideVelocity.x !== 0 && slideVelocity.y !== 0) {
-                const normalizedVelocity = new Phaser.Math.Vector2(slideVelocity.x, slideVelocity.y).normalize();
-                slideVelocity.x = normalizedVelocity.x * slideSpeed;
-                slideVelocity.y = normalizedVelocity.y * slideSpeed;
-            }
-        } else if (this.penguin.body.velocity.x !== 0 || this.penguin.body.velocity.y !== 0) {
-            // Normalize current velocity and multiply by slide speed
-            const normalizedVelocity = new Phaser.Math.Vector2(
-                this.penguin.body.velocity.x, 
-                this.penguin.body.velocity.y
-            ).normalize();
-            
-            slideVelocity.x = normalizedVelocity.x * slideSpeed;
-            slideVelocity.y = normalizedVelocity.y * slideSpeed;
-        } else {
-            // If not moving, slide in the direction the player is facing
-            // For penguin, use the gun's rotation as reference
-            if (this.penguin.gun) {
-                const angle = this.penguin.gun.rotation;
-                slideVelocity.x = Math.cos(angle) * slideSpeed;
-                slideVelocity.y = Math.sin(angle) * slideSpeed;
-            } else {
-                // Default to right if no gun
-                slideVelocity.x = slideSpeed;
-            }
-        }
-        
-        // Store original drag for restoration later
-        this.originalDrag = this.penguin.body.drag.clone();
-        
-        // Reduce drag significantly to simulate ice sliding
-        this.penguin.body.setDrag(10, 10);
-        
-        // Apply slide velocity
-        this.penguin.body.setVelocity(slideVelocity.x, slideVelocity.y);
-        
-        // Add visual effects for sliding
-        
-        // 1. Slight transparency
-        this.penguin.setAlpha(0.85);
-        
-        // 2. Create a trail effect
-        this.slideTrailEmitter = this.createSlideTrail();
-        
-        // 3. Add a slight tilt to the penguin in the direction of movement
-        const tiltAngle = Math.atan2(slideVelocity.y, slideVelocity.x);
-        this.penguin.rotation = tiltAngle * 0.2; // Subtle tilt
-        
-        // End slide gradually after a longer duration
-        this.time.delayedCall(400, () => {
-            // Start gradual slowdown
-            this.slideEndTween = this.tweens.add({
-                targets: this.penguin.body.velocity,
-                x: { from: this.penguin.body.velocity.x, to: this.penguin.body.velocity.x * 0.3 },
-                y: { from: this.penguin.body.velocity.y, to: this.penguin.body.velocity.y * 0.3 },
-                duration: 300,
-                ease: 'Sine.easeOut',
-                onComplete: () => {
-                    // Restore original drag
-                    if (this.originalDrag) {
-                        this.penguin.body.setDrag(this.originalDrag.x, this.originalDrag.y);
-                    }
-                    
-                    // Reset visual effects
-                    this.penguin.setAlpha(1);
-                    this.penguin.rotation = 0;
-                    
-                    // Stop trail effect
-                    if (this.slideTrailEmitter) {
-                        this.slideTrailEmitter.setActive(false);
-                        this.slideTrailEmitter.setVisible(false);
-                        this.slideTrailEmitter.destroy();
-                        this.slideTrailEmitter = null;
-                    }
-                    
-                    this.isSliding = false;
-                }
-            });
-        });
-    }
-    
-    createSlideTrail() {
-        // Create a particle manager for the slide trail
-        const particles = this.add.particles(0, 0, 'bullet', {
-            x: 0,
-            y: 0,
-            tint: 0x99ccff, // Light blue tint
-            scale: { start: 0.5, end: 0.1 },
-            alpha: { start: 0.4, end: 0 },
-            speed: 0,
-            lifespan: 300,
-            blendMode: 'ADD',
-            frequency: 15,
-            emitting: true,
-            follow: this.penguin
-        });
-        
-        return particles;
     }
 
     updateWeapon() {
@@ -1903,11 +1968,12 @@ class BaseMapScene extends Phaser.Scene {
             delay: 600
         });
 
-        // Create main menu button (positioned where restart button was)
-        const mainMenuButton = this.add.text(centerX, centerY + 120, 'Main Menu', {
-            fontSize: '36px',
+        // Create main menu button
+        const mainMenuButton = this.add.text(centerX, centerY + 150, 'RETURN TO MAIN MENU', {
+            fontSize: '24px',
+            fontFamily: 'Arial',
             fill: '#ffffff',
-            backgroundColor: '#000088',
+            backgroundColor: '#880000',
             padding: { x: 20, y: 10 }
         })
         .setOrigin(0.5)
@@ -1936,26 +2002,29 @@ class BaseMapScene extends Phaser.Scene {
 
         // Go to main menu on button click
         mainMenuButton.on('pointerdown', () => {
-            // Emit event to GameManager
-            this.events.emit('playerDeath');
+            // Stop all active scenes properly
+            const activeScenes = this.scene.manager.getScenes(true);
+            activeScenes.forEach(scene => {
+                if (scene.scene.key !== 'Menu') {
+                    scene.scene.stop();
+                }
+            });
             
-            // Stop all currently running scenes
-            this.scene.stop();
+            // Reset game registry data
+            this.registry.reset();
             
-            // Start the main menu scene
+            // Return to menu scene
             this.scene.start('Menu');
         });
 
         // Enhanced hover effects for main menu button
         mainMenuButton.on('pointerover', () => {
-            mainMenuButton.setBackgroundColor('#0000aa');
-            mainMenuButton.setScale(1.1);
+            mainMenuButton.setBackgroundColor('#aa0000');
             this.game.canvas.style.cursor = 'pointer';
         });
         
         mainMenuButton.on('pointerout', () => {
-            mainMenuButton.setBackgroundColor('#000088');
-            mainMenuButton.setScale(1);
+            mainMenuButton.setBackgroundColor('#880000');
             this.game.canvas.style.cursor = 'default';
         });
     }
@@ -1980,54 +2049,54 @@ class BaseMapScene extends Phaser.Scene {
 
     // Add ocean background from Map scene
     createOceanBackground() {
-        // Create a top-down ocean view that follows the camera
-        const width = this.game.config.width;
-        const height = this.game.config.height;
-        
-        // Create a container for all ocean elements
+        // Create a container fixed to the camera
         this.oceanContainer = this.add.container(0, 0);
-        this.oceanContainer.setScrollFactor(0); // Fixed to camera
+        this.oceanContainer.setDepth(-100);
+        this.oceanContainer.setScrollFactor(0);
         
-        // Deep ocean background (single gradient from medium to dark blue)
+        // Create the ocean gradient with extra padding to prevent any black edges
         this.oceanGradient = this.add.graphics();
-        this.updateOceanGradient(width, height);
         this.oceanContainer.add(this.oceanGradient);
         
-        // Make sure the ocean background is always at the bottom layer
-        this.oceanContainer.setDepth(-100);
+        // Get current camera dimensions
+        const { width, height } = this.cameras.main;
         
-        // Add whitecaps
+        // Draw the initial gradient with padding
+        this.updateOceanGradient(width, height);
+        
+        // Add a resize listener to update the ocean background when the camera/window changes
+        this.scale.on('resize', () => {
+            const newWidth = this.cameras.main.width;
+            const newHeight = this.cameras.main.height;
+            this.updateOceanGradient(newWidth, newHeight);
+        });
+        
+        // Listen for camera changes and update if needed
+        this.cameras.main.on('cameraresize', (camera) => {
+            this.updateOceanGradient(camera.width, camera.height);
+        });
+        
+        // Initialize whitecap pool container
+        this.whitecapPool = this.add.group();
+        
+        // Create whitecaps after initializing the pool
         this.createWhitecaps();
-        
-        // Add random water sparkles throughout
-        this.time.addEvent({
-            delay: 800,
-            callback: this.addWaterSparkle,
-            callbackScope: this,
-            repeat: -1
-        });
-        
-        // Update the ocean position on camera move
-        this.cameras.main.on('camerascroll', (camera) => {
-            // This ensures the ocean background stays centered on the camera
-            this.oceanContainer.setPosition(camera.scrollX, camera.scrollY);
-        });
-        
-        // Handle window resize to ensure ocean covers the entire screen
-        this.scale.on('resize', (gameSize) => {
-            this.updateOceanGradient(gameSize.width, gameSize.height);
-        });
     }
     
     updateOceanGradient(width, height) {
-        // Clear existing gradient
-        if (this.oceanGradient) {
-            this.oceanGradient.clear();
-            
-            // Create new gradient with updated dimensions
-            this.oceanGradient.fillGradientStyle(0x1E90FF, 0x1E90FF, 0x0F52BA, 0x0F52BA, 1);
-            this.oceanGradient.fillRect(0, 0, width, height);
-        }
+        if (!this.oceanGradient) return;
+        
+        this.oceanGradient.clear();
+        
+        // Create a gradient from dark blue to light blue
+        const startColor = 0x0a3b76;  // Dark blue
+        const endColor = 0x00a9ff;    // Light blue
+        
+        // Add extra padding to the gradient to ensure no black shows at edges
+        const padding = 100; // Extra pixels to draw beyond the visible area
+        
+        this.oceanGradient.fillGradientStyle(startColor, startColor, endColor, endColor, 1);
+        this.oceanGradient.fillRect(-padding, -padding, width + (padding * 2), height + (padding * 2));
     }
     
     createWhitecaps() {
@@ -2167,31 +2236,466 @@ class BaseMapScene extends Phaser.Scene {
         });
     }
 
-    // Add a method to heal the player and show healing numbers
-    healPlayer(amount) {
-        if (!this.penguin || this.penguin.health <= 0) return;
+    // Centralized damage handling system
+    handleDamage(target, amount, isHealing = false) {
+        // Don't process if target is invalid or already dead
+        if (!target || (target.health <= 0 && !isHealing)) return;
         
-        // Calculate actual healing (don't exceed max health)
-        const actualHealing = Math.min(amount, this.penguin.maxHealth - this.penguin.health);
+        // For player, don't apply damage if already invincible
+        if (!isHealing && target === this.penguin && target.isInvincible) {
+            this.log("PHYSICS", `Damage prevented due to player invincibility`);
+            return;
+        }
         
-        if (actualHealing <= 0) return;
+        // Apply damage/healing
+        const oldHealth = target.health;
         
-        // Apply healing
-        this.penguin.health += actualHealing;
+        if (isHealing) {
+            target.health = Math.min(target.health + amount, target.maxHealth);
+            this.log("PHYSICS", `Healing applied`, {
+                target: target === this.penguin ? "player" : "enemy",
+                amount,
+                oldHealth,
+                newHealth: target.health
+            });
+        } else {
+            target.health -= amount;
+            // Ensure health doesn't go below 0
+            if (target.health < 0) target.health = 0;
+            
+            this.log("PHYSICS", `Damage applied`, {
+                target: target === this.penguin ? "player" : "enemy",
+                amount,
+                oldHealth,
+                newHealth: target.health
+            });
+        }
         
-        // Show healing number
-        this.createDamageNumber(this.penguin.x, this.penguin.y, actualHealing, true);
+        // Show damage/healing number
+        this.createDamageNumber(
+            target.x, 
+            target.y, 
+            amount,
+            isHealing
+        );
         
         // Visual feedback
-        this.penguin.setTint(0x00ff00);
-        this.time.delayedCall(100, () => {
-            this.penguin.clearTint();
+        if (!isHealing) {
+            target.setTint(0xff0000);
+            this.time.delayedCall(100, () => {
+                if (target && target.active) {
+                    target.clearTint();
+                }
+            });
+            
+            // Play hit sound
+            this.sound.play('hit', {
+                volume: 0.4,
+                rate: isHealing ? 1.2 : (0.8 + Math.random() * 0.4)
+            });
+        }
+        
+        // Handle player specific behavior - CRITICAL section for penguin functionality
+        if (target === this.penguin && !isHealing) {
+            // CRITICAL: Double check the penguin's properties after damage
+            this.penguin.active = true;
+            this.penguin.visible = true;
+            
+            // CRITICAL: Make sure physics body is enabled and working
+            if (this.penguin.body) {
+                this.penguin.body.enable = true;
+                
+                // Reset any velocity issues
+                const velocity = this.calculateVelocity();
+                if (velocity.x !== 0 || velocity.y !== 0) {
+                    this.penguin.body.setVelocity(velocity.x, velocity.y);
+                } else {
+                    // If no keys pressed, stop the penguin
+                    this.penguin.body.setVelocity(0, 0);
+                }
+            }
+            
+            // For player only: make invincible after taking damage
+            // This is different from enemy behavior
+            this.makePlayerInvincible();
+            
+            // Update health bar
+            this.updateHealthBar();
+            
+            // Log player state for debugging
+            this.log("PLAYER", "Player state after damage", {
+                health: this.penguin.health,
+                active: this.penguin.active,
+                visible: this.penguin.visible,
+                bodyEnabled: this.penguin.body ? this.penguin.body.enable : "no body",
+                isInvincible: this.penguin.isInvincible
+            });
+        }
+        
+        // Handle death if health reaches 0
+        if (target.health <= 0) {
+            if (target === this.penguin) {
+                // Player death handling through state machine
+                if (this.penguin.stateMachine) {
+                    this.log("PLAYER", "Player died, transitioning to dead state");
+                    this.penguin.stateMachine.transition('dead');
+                }
+            } else if (typeof target.die === 'function') {
+                // Enemy death handling through die method
+                this.log("ENEMIES", "Enemy died, calling die() method");
+                target.die();
+            }
+        }
+    }
+
+    // Helper method for healing
+    healTarget(target, amount) {
+        this.handleDamage(target, amount, true);
+    }
+
+    // Add this new method to reset the scene state
+    resetScene() {
+        this.log("LIFECYCLE", "Starting reset of scene:", this.scene.key);
+        
+        try {
+            // Set isBeingReset flag to prevent updates
+            this.isBeingReset = true;
+            
+            // Kill all tweens
+            this.tweens.killAll();
+            this.log("LIFECYCLE", "Killed all tweens");
+            
+            // Remove all time events
+            this.time.removeAllEvents();
+            this.log("LIFECYCLE", "Removed all time events");
+            
+            // Stop all sounds
+            this.sound.stopAll();
+            this.log("LIFECYCLE", "Stopped all sounds");
+            
+            // Clean up penguin invincibility effects if they exist
+            if (this.penguin) {
+                // Remove invincibility timer
+                if (this.penguin.invincibilityTimer) {
+                    this.penguin.invincibilityTimer.remove();
+                    this.penguin.invincibilityTimer = null;
+                }
+                
+                // Remove flash effect
+                if (this.penguin.invincibilityFlash) {
+                    this.penguin.invincibilityFlash.remove();
+                    this.penguin.invincibilityFlash = null;
+                }
+                
+                // Remove overlay
+                if (this.penguin.invincibilityOverlay) {
+                    this.penguin.invincibilityOverlay.destroy();
+                    this.penguin.invincibilityOverlay = null;
+                }
+                
+                // Reset invincibility flag
+                this.penguin.isInvincible = false;
+                
+                // Reset penguin's alpha
+                this.penguin.setAlpha(1);
+                
+                // Reset active state
+                this.penguin.active = true;
+            }
+            
+            // Start game object cleanup
+            this.log("LIFECYCLE", "Starting game object cleanup");
+            
+            // Clear physics groups
+            this.safelyDestroyGameObjects();
+            
+            // Reset game state flags
+            this.isGameFrozen = false;
+            this.isSliding = false;
+            this.slideTimer = 0;
+            this.isBeingReset = false;
+            
+            this.log("LIFECYCLE", "Reset game state flags");
+            
+            // Reset input system
+            this.safelyResetInput();
+            this.log("LIFECYCLE", "Resetting input");
+            
+            // Reset physics
+            this.safelyResetPhysics();
+            this.log("LIFECYCLE", "Resetting physics");
+            
+            this.log("LIFECYCLE", "Reset complete for scene:", this.scene.key);
+        } catch (error) {
+            this.logError("Error during scene reset:", error);
+        }
+    }
+
+    // New helper methods for safer cleanup
+    safelyDestroyGameObjects() {
+        // Safely destroy groups
+        const groups = [this.enemies, this.crates, this.barrels, this.cash];
+        groups.forEach(group => {
+            if (group) {
+                try {
+                    // First try to destroy all children individually
+                    if (group.children && group.children.entries) {
+                        group.children.entries.forEach(child => {
+                            if (child && child.active) {
+                                if (typeof child.die === 'function') {
+                                    try { child.die(); } catch (e) { this.logWarning('Error in die():', e); }
+                                }
+                                if (typeof child.destroy === 'function') {
+                                    try { child.destroy(); } catch (e) { this.logWarning('Error destroying child:', e); }
+                                }
+                            }
+                        });
+                    }
+                    
+                    // Then try to clear the group
+                    if (typeof group.clear === 'function') {
+                        try {
+                            group.clear(true, true);
+                        } catch (e) {
+                            this.logWarning('Error clearing group:', e);
+                        }
+                    }
+                    
+                    // Finally destroy the group itself
+                    if (typeof group.destroy === 'function') {
+                        try {
+                            group.destroy(true, true);
+                        } catch (e) {
+                            this.logWarning('Error destroying group:', e);
+                        }
+                    }
+                } catch (e) {
+                    this.logWarning('Error in group cleanup:', e);
+                }
+            }
         });
         
-        // Play healing sound
-        this.sound.play('hit', {
-            volume: 0.4,
-            rate: 1.2 + Math.random() * 0.4
+        // Reset references to groups
+        this.enemies = null;
+        this.crates = null;
+        this.barrels = null;
+        this.cash = null;
+
+        // Clean up player and related objects
+        if (this.penguin) {
+            try {
+                if (this.penguin.gun) {
+                    if (this.penguin.gun.bullets) {
+                        try {
+                            if (typeof this.penguin.gun.bullets.clear === 'function') {
+                                this.penguin.gun.bullets.clear(true, true);
+                            }
+                            if (typeof this.penguin.gun.bullets.destroy === 'function') {
+                                this.penguin.gun.bullets.destroy(true, true);
+                            }
+                        } catch (e) {
+                            this.logWarning('Error cleaning up bullets:', e);
+                        }
+                    }
+                    try {
+                        this.penguin.gun.destroy();
+                    } catch (e) {
+                        this.logWarning('Error destroying gun:', e);
+                    }
+                }
+                
+                if (this.penguin.stateMachine) {
+                    try {
+                        // Clean up state machine
+                        Object.values(this.penguin.stateMachine.states).forEach(state => {
+                            if (state && typeof state.exit === 'function') {
+                                state.exit();
+                            }
+                        });
+                    } catch (e) {
+                        this.logWarning('Error cleaning up state machine:', e);
+                    }
+                    this.penguin.stateMachine = null;
+                }
+                
+                if (this.penguin.invincibilityTimer) {
+                    try {
+                        this.penguin.invincibilityTimer.remove();
+                    } catch (e) {
+                        this.logWarning('Error removing invincibility timer:', e);
+                    }
+                }
+                
+                if (this.penguin.invincibilityFlash) {
+                    try {
+                        this.penguin.invincibilityFlash.remove();
+                    } catch (e) {
+                        this.logWarning('Error removing invincibility flash:', e);
+                    }
+                }
+                
+                try {
+                    this.penguin.destroy();
+                } catch (e) {
+                    this.logWarning('Error destroying penguin:', e);
+                }
+            } catch (e) {
+                this.logWarning('Error in penguin cleanup:', e);
+            }
+            this.penguin = null;
+        }
+
+        // Clean up UI elements
+        if (this.uiContainer) {
+            try {
+                this.uiContainer.destroy(true);
+            } catch (e) {
+                this.logWarning('Error destroying UI container:', e);
+            }
+            this.uiContainer = null;
+        }
+
+        // Clean up minimap
+        if (this.minimapContainer) {
+            try {
+                this.minimapContainer.destroy(true);
+            } catch (e) {
+                this.logWarning('Error destroying minimap container:', e);
+            }
+            this.minimapContainer = null;
+        }
+
+        // Clean up ocean background
+        if (this.oceanContainer) {
+            try {
+                this.oceanContainer.destroy(true);
+            } catch (e) {
+                this.logWarning('Error destroying ocean container:', e);
+            }
+            this.oceanContainer = null;
+        }
+
+        // Clean up map layers
+        if (this.map) {
+            try {
+                if (this.map.layers) {
+                    this.map.layers.forEach(layer => {
+                        if (layer && layer.tilemapLayer) {
+                            layer.tilemapLayer.destroy();
+                        }
+                    });
+                }
+                this.map.destroy();
+            } catch (e) {
+                this.logWarning('Error destroying map:', e);
+            }
+            this.map = null;
+        }
+
+        // Clean up specific layers
+        ['backgroundLayer', 'buildingsLayer', 'collisionLayer'].forEach(layerName => {
+            if (this[layerName]) {
+                try {
+                    this[layerName].destroy();
+                } catch (e) {
+                    this.logWarning(`Error destroying ${layerName}:`, e);
+                }
+                this[layerName] = null;
+            }
         });
+        
+        // Clear any remaining game objects
+        try {
+            if (this.children) {
+                this.children.removeAll(true);
+            }
+        } catch (e) {
+            this.logWarning('Error removing children:', e);
+        }
+    }
+
+    safelyResetInput() {
+        try {
+            if (this.input) {
+                // Remove all input listeners
+                this.input.off('pointerdown');
+                this.input.off('pointerup');
+                
+                // Shutdown keyboard
+                if (this.input.keyboard) {
+                    this.input.keyboard.shutdown();
+                }
+                
+                // Clean up key objects
+                if (this.keys) {
+                    Object.values(this.keys).forEach(key => {
+                        if (key && typeof key.destroy === 'function') {
+                            key.destroy();
+                        }
+                    });
+                    this.keys = null;
+                }
+            }
+        } catch (e) {
+            this.logWarning('Error resetting input:', e);
+        }
+    }
+
+    safelyResetPhysics() {
+        try {
+            if (this.physics && this.physics.world) {
+                // Destroy all colliders
+                if (this.physics.world.colliders) {
+                    this.physics.world.colliders.destroy();
+                }
+                
+                // Clear all bodies
+                if (this.physics.world.bodies) {
+                    this.physics.world.bodies.clear();
+                }
+            }
+        } catch (e) {
+            this.logWarning('Error resetting physics:', e);
+        }
+    }
+
+    // Add this method to properly shutdown the scene
+    shutdown() {
+        this.log("LIFECYCLE", `Shutting down scene: ${this.scene.key}`);
+        this.isDestroyed = true;  // Set flag to prevent further updates
+        this.resetScene();
+        super.shutdown();
+    }
+
+    // Add this method to properly destroy the scene
+    destroy() {
+        this.log("LIFECYCLE", `Destroying scene: ${this.scene.key}`);
+        this.isDestroyed = true;  // Set flag to prevent further updates
+        this.resetScene();
+        super.destroy();
+    }
+
+    createSlideTrail() {
+        // Create a particle manager for the slide trail
+        const particles = this.add.particles(0, 0, 'bullet', {
+            x: 0,
+            y: 0,
+            tint: 0x99ccff, // Light blue tint
+            scale: { start: 0.5, end: 0.1 },
+            alpha: { start: 0.4, end: 0 },
+            speed: 0,
+            lifespan: 300,
+            blendMode: 'ADD',
+            frequency: 15,
+            emitting: true,
+            follow: this.penguin
+        });
+        
+        return particles;
+    }
+
+    // Add this method to BaseMapScene
+    toggleDebugLogging() {
+        this.debugLogging = !this.debugLogging;
     }
 } 

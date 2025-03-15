@@ -1,9 +1,11 @@
 class Map1Scene extends BaseMapScene {
     constructor() {
         super('Map1Scene');
+        this.logPrefix = "[🗺️ MAP1]";
     }
 
     createMap() {
+        this.log("Creating Map1 tilemap");
         super.createMap();
         
         // Map1-specific map creation
@@ -31,12 +33,16 @@ class Map1Scene extends BaseMapScene {
             this.buildingsLayer = this.map.createLayer('Buildings', tileset, 0, 0);
             this.buildingsLayer.setScale(2);
             this.buildingsLayer.setCollisionByExclusion([-1]);
+            this.log("Buildings layer created");
+        } else {
+            this.log("No Buildings layer found in tilemap");
         }
         
         // Set world bounds
         const worldWidth = this.map.widthInPixels * 2;
         const worldHeight = this.map.heightInPixels * 2;
         this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
+        this.log("World bounds set", { width: worldWidth, height: worldHeight });
         
         // Configure camera bounds only (don't follow player yet)
         this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
@@ -49,16 +55,27 @@ class Map1Scene extends BaseMapScene {
             const worldHeight = this.map.heightInPixels * 2;
             this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
             this.cameras.main.startFollow(this.penguin, true, 0.09, 0.09);
+            this.log("Camera following player", { 
+                lerp: 0.09, 
+                worldWidth, 
+                worldHeight 
+            });
+        } else {
+            this.logWarning("Cannot setup camera - penguin not created yet");
         }
     }
 
     // Override the create method to call setupCamera after player creation
     create() {
+        this.log("Starting Map1Scene creation");
+        
         // Call the parent create method first
         super.create();
         
         // Now set up the camera to follow the player
         this.setupCamera();
+        
+        this.log("Map1Scene creation complete");
         
         // Debug visualization for collisions (uncomment to enable)
         // this.backgroundLayer.renderDebug(this.add.graphics(), {
@@ -69,6 +86,7 @@ class Map1Scene extends BaseMapScene {
     }
 
     setupPhysics() {
+        this.log("Setting up Map1 physics");
         super.setupPhysics();
         
         // Map1-specific physics setup
@@ -98,6 +116,10 @@ class Map1Scene extends BaseMapScene {
             // Add collision between crates/barrels and floor layer edges
             this.physics.add.collider(this.crates, this.backgroundLayer);
             this.physics.add.collider(this.barrels, this.backgroundLayer);
+            
+            this.log("Background layer collisions set up");
+        } else {
+            this.logWarning("No background layer for collisions");
         }
         
         if (this.buildingsLayer) {
@@ -124,6 +146,10 @@ class Map1Scene extends BaseMapScene {
             // Set up collisions with buildings layer for crates and barrels
             this.physics.add.collider(this.crates, this.buildingsLayer);
             this.physics.add.collider(this.barrels, this.buildingsLayer);
+            
+            this.log("Buildings layer collisions set up");
+        } else {
+            this.logWarning("No buildings layer for collisions");
         }
         
         // Add enemy-to-enemy collisions
@@ -137,9 +163,12 @@ class Map1Scene extends BaseMapScene {
         this.physics.add.collider(this.crates, this.crates);
         this.physics.add.collider(this.barrels, this.barrels);
         this.physics.add.collider(this.crates, this.barrels);
+        
+        this.log("Entity collisions set up");
     }
 
     spawnEntities() {
+        this.log("Spawning Map1 entities");
         // Calculate difficulty parameters
         const diffParams = this.calculateDifficultyParams(this.floorLevel);
         
@@ -149,7 +178,10 @@ class Map1Scene extends BaseMapScene {
         // If no map spawn points were used or not enough entities were spawned,
         // fall back to the base implementation to spawn remaining entities
         if (!usedMapSpawnPoints) {
+            this.log("No map spawn points used, falling back to base implementation");
             super.spawnEntities();
+        } else {
+            this.log("Entities spawned from map layers");
         }
         // Removed ladder spawning - ladder will only spawn after all enemies are dead
     }
@@ -160,22 +192,31 @@ class Map1Scene extends BaseMapScene {
         // Spawn enemies from EnemySpawnPoints layer
         const enemySpawnLayer = this.map.getObjectLayer('EnemySpawnPoints');
         if (enemySpawnLayer && enemySpawnLayer.objects && enemySpawnLayer.objects.length > 0) {
+            this.log("Found enemy spawn layer with", { count: enemySpawnLayer.objects.length });
             this.spawnEnemiesFromLayer(enemySpawnLayer.objects);
             entitiesSpawned = true;
+        } else {
+            this.log("No enemy spawn layer found");
         }
         
         // Spawn barrels from BarrelSpawnPoints layer
         const barrelSpawnLayer = this.map.getObjectLayer('BarrelSpawnPoints');
         if (barrelSpawnLayer && barrelSpawnLayer.objects && barrelSpawnLayer.objects.length > 0) {
+            this.log("Found barrel spawn layer with", { count: barrelSpawnLayer.objects.length });
             this.spawnBarrelsFromLayer(barrelSpawnLayer.objects);
             entitiesSpawned = true;
+        } else {
+            this.log("No barrel spawn layer found");
         }
         
         // Spawn crates from CrateSpawnPoints layer
         const crateSpawnLayer = this.map.getObjectLayer('CrateSpawnPoints');
         if (crateSpawnLayer && crateSpawnLayer.objects && crateSpawnLayer.objects.length > 0) {
+            this.log("Found crate spawn layer with", { count: crateSpawnLayer.objects.length });
             this.spawnCratesFromLayer(crateSpawnLayer.objects);
             entitiesSpawned = true;
+        } else {
+            this.log("No crate spawn layer found");
         }
         
         return entitiesSpawned;
@@ -186,10 +227,11 @@ class Map1Scene extends BaseMapScene {
         const diffParams = this.calculateDifficultyParams(this.floorLevel);
         const maxEnemies = diffParams.enemyCount;
         
-        console.log(`Map1Scene: Spawning ${maxEnemies} enemies for floor level ${this.floorLevel}`);
+        this.log(`Spawning ${maxEnemies} enemies for floor level ${this.floorLevel}`);
         
         // If we have no spawn points, use the default spawning method
         if (!spawnPoints || spawnPoints.length === 0) {
+            this.logWarning("No spawn points provided, using default spawning method");
             // Use the parent spawnEntities method which now uses the type distribution
             super.spawnEntities();
             return;
@@ -247,7 +289,13 @@ class Map1Scene extends BaseMapScene {
                 }
             }
             
-            console.log(`Map1Scene: Spawning enemy #${enemiesSpawned+1} at point (${baseX}, ${baseY}) with offset (${offsetX}, ${offsetY}), type: ${enemyType}`);
+            this.log(`Spawning enemy #${enemiesSpawned+1}`, { 
+                position: { x, y }, 
+                basePosition: { x: baseX, y: baseY },
+                offset: { x: offsetX, y: offsetY }, 
+                type: enemyType 
+            });
+            
             this.spawnEnemy(enemyType, x, y);
             enemiesSpawned++;
         }
@@ -283,7 +331,13 @@ class Map1Scene extends BaseMapScene {
                 random -= weight;
             }
             
-            console.log(`Map1Scene: Spawning additional enemy #${enemiesSpawned+1} at point (${baseX}, ${baseY}) with offset (${offsetX}, ${offsetY}), type: ${selectedType}`);
+            this.log(`Spawning additional enemy #${enemiesSpawned+1}`, { 
+                position: { x, y }, 
+                basePosition: { x: baseX, y: baseY },
+                offset: { x: offsetX, y: offsetY }, 
+                type: selectedType 
+            });
+            
             this.spawnEnemy(selectedType, x, y);
             enemiesSpawned++;
         }
@@ -292,6 +346,8 @@ class Map1Scene extends BaseMapScene {
     spawnBarrelsFromLayer(spawnPoints) {
         // Shuffle the spawn points to randomize which ones we use
         const shuffledPoints = Phaser.Utils.Array.Shuffle([...spawnPoints]);
+        
+        this.log(`Spawning ${shuffledPoints.length} barrels from layer`);
         
         // Spawn barrels at the selected points (use all of them)
         for (let i = 0; i < shuffledPoints.length; i++) {
@@ -326,10 +382,6 @@ class Map1Scene extends BaseMapScene {
                         bullet.destroy();
                         this.createBulletImpactEffect(bullet.x, bullet.y);
                         
-                        // Debug: Check what type of object barrel is
-                        console.log('Barrel object:', barrel);
-                        console.log('Is Crate instance:', barrel instanceof Crate);
-                        
                         // Try to damage the barrel with error handling
                         try {
                             if (typeof barrel.takeDamage === 'function') {
@@ -337,12 +389,12 @@ class Map1Scene extends BaseMapScene {
                                 
                                 // If barrel is destroyed, handle explosion
                                 if (barrel.health <= 0) {
-                                    console.log('Barrel health reached zero, triggering explosion');
+                                    this.log('Barrel health reached zero, triggering explosion');
                                     this.handleCrateExplosion(barrel);
                                 }
                             } else {
                                 // Fallback if takeDamage is not a function
-                                console.warn('takeDamage is not a function on barrel');
+                                this.logWarning('takeDamage is not a function on barrel');
                                 
                                 // Add health property if it doesn't exist
                                 if (barrel.health === undefined) {
@@ -354,12 +406,12 @@ class Map1Scene extends BaseMapScene {
                                 
                                 // If barrel is destroyed, handle explosion
                                 if (barrel.health <= 0) {
-                                    console.log('Barrel health reached zero (fallback), triggering explosion');
+                                    this.log('Barrel health reached zero (fallback), triggering explosion');
                                     this.handleCrateExplosion(barrel);
                                 }
                             }
                         } catch (error) {
-                            console.error('Error handling barrel damage:', error);
+                            this.logError('Error handling barrel damage:', error);
                         }
                     },
                     null,
@@ -372,6 +424,8 @@ class Map1Scene extends BaseMapScene {
     spawnCratesFromLayer(spawnPoints) {
         // Shuffle the spawn points to randomize which ones we use
         const shuffledPoints = Phaser.Utils.Array.Shuffle([...spawnPoints]);
+        
+        this.log(`Spawning ${shuffledPoints.length} crates from layer`);
         
         // Spawn crates at the selected points (use all of them)
         for (let i = 0; i < shuffledPoints.length; i++) {
@@ -413,5 +467,43 @@ class Map1Scene extends BaseMapScene {
             // Flip gun sprite based on angle
             this.penguin.gun.gunSprite.flipY = Math.abs(angle) > Math.PI / 2;
         }
+    }
+
+    // Add this method to the Map1Scene class
+    resetScene() {
+        this.log("Resetting Map1Scene");
+        
+        // Call parent resetScene method first
+        super.resetScene();
+        
+        // Add Map1Scene-specific reset logic
+        if (this.buildingsLayer) {
+            this.buildingsLayer = null;
+        }
+        
+        // Any other Map1Scene-specific properties to reset
+        this.log("Map1Scene reset complete");
+    }
+    
+    // Add logging methods if they don't exist in BaseMapScene
+    log(message, data) {
+        if (!this.debugLogging) return;
+        
+        const timestamp = new Date().toISOString().substr(11, 8); // HH:MM:SS
+        console.log(`${timestamp} ${this.logPrefix}: ${message}`, data || '');
+    }
+
+    logWarning(message, data) {
+        if (!this.debugLogging) return;
+        
+        const timestamp = new Date().toISOString().substr(11, 8);
+        console.warn(`${timestamp} ${this.logPrefix}: ⚠️ ${message}`, data || '');
+    }
+
+    logError(message, error) {
+        if (!this.debugLogging) return;
+        
+        const timestamp = new Date().toISOString().substr(11, 8);
+        console.error(`${timestamp} ${this.logPrefix}: ❌ ${message}`, error || '');
     }
 } 

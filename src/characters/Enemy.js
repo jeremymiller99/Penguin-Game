@@ -4,6 +4,10 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         scene.add.existing(this);
         scene.physics.add.existing(this);
 
+        // Initialize logging
+        this.debugLogging = scene.debugLogging || true;
+        this.logPrefix = `[👹 ENEMY ${config.type || 'Basic'}]`;
+        
         this.setScale(2);
         this.setOrigin(0.5, 0.5);
 
@@ -16,6 +20,13 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.attackCooldown = config.attackCooldown || 1000;
         this.attackDamage = config.attackDamage || 17; // Adjusted to kill player in 6 hits (100/17 ≈ 6)
         this.lastAttackTime = 0;
+        
+        this.log("Created enemy", {
+            health: this.health,
+            speed: this.speed,
+            attackRange: this.attackRange,
+            attackDamage: this.attackDamage
+        });
         
         // Attack state flags
         this.isAttacking = false;
@@ -39,6 +50,11 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         // Simple movement properties
         this.movementTimer = 0;
         this.isInsideBuilding = false;
+        
+        // Override takeDamage to use centralized system
+        this.takeDamage = (amount) => {
+            scene.handleDamage(this, amount);
+        };
     }
     
     createNametag() {
@@ -65,26 +81,58 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         // Flip the enemy to face the player
         this.flipX = player.x < this.x;
 
-        // Check if enemy is inside a building (simple check)
+        // Check if enemy is inside a building
+        const wasInsideBuilding = this.isInsideBuilding;
         this.checkIfInsideBuilding();
+        
+        // Log only when building state changes
+        if (wasInsideBuilding !== this.isInsideBuilding) {
+            if (this.isInsideBuilding) {
+                this.log("Enemy moved inside building, attempting to escape");
+            } else {
+                this.log("Enemy escaped from building");
+            }
+        }
 
-        // Only chase player if:
-        // 1. Within detection radius
-        // 2. Not inside a building
-        // 3. Not in attack range
-        // 4. Not already attacking
-        if (distance <= this.detectionRadius && !this.isInsideBuilding && !this.isAttacking) {
-            if (distance > this.attackRange) {
-                // Simple movement towards player
+        // Track state changes for logging
+        const previousState = {
+            isChasing: this._isChasing,
+            isInAttackRange: this._isInAttackRange,
+            isAttacking: this.isAttacking
+        };
+        
+        // Update current state
+        this._isChasing = distance <= this.detectionRadius && !this.isInsideBuilding && !this.isAttacking;
+        this._isInAttackRange = distance <= this.attackRange;
+
+        // Only chase player if within detection radius, not inside building, and not already attacking
+        if (this._isChasing) {
+            if (!this._isInAttackRange) {
+                // Only log state change from not chasing to chasing
+                if (!previousState.isChasing || previousState.isInAttackRange) {
+                    this.log("Detected player, pursuing", { distance });
+                }
                 this.moveTowardsPlayer(player);
                 this.play('enemy_walk', true);
             } else {
+                // Only log when entering attack range
+                if (!previousState.isInAttackRange) {
+                    this.log("Player in attack range, preparing to attack", { distance });
+                }
                 this.body.setVelocity(0, 0);
                 this.play('enemy_idle', true);
                 this.attack(player, time);
             }
         } else {
-            // Outside detection radius, inside building, or already attacking - stop moving
+            // Only log when state changes from chasing to not chasing
+            if (previousState.isChasing) {
+                if (distance > this.detectionRadius) {
+                    this.log("Lost sight of player, returning to idle", { distance });
+                } else if (this.isInsideBuilding) {
+                    this.log("Stuck inside building, cannot pursue player");
+                }
+            }
+            
             if (!this.isAttacking) {
                 this.body.setVelocity(0, 0);
                 this.play('enemy_idle', true);
@@ -261,7 +309,12 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         if (this.scene.isGameFrozen) return;
         
         // Only attack if cooldown has passed
-        if (time - this.lastAttackTime > this.attackCooldown) {
+        if (time - this.lastAttackTime > this.attackCooldown && !this.isAttacking) {
+            this.log("Attacking player", { 
+                attackDamage: this.attackDamage,
+                playerHealth: player.health
+            });
+            
             // Store original position for animation
             const originalX = this.x;
             const originalY = this.y;
@@ -286,7 +339,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                 onComplete: () => {
                     // Deal damage at the peak of the lunge, but only if not already applied
                     if (!this.hasDamageBeenApplied) {
-                        player.takeDamage(this.attackDamage);
+                        this.scene.handleDamage(player, this.attackDamage);
                         this.hasDamageBeenApplied = true;
                     }
                     
@@ -301,6 +354,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                             // Reset attack flags when animation is complete
                             this.isAttacking = false;
                             this.hasDamageBeenApplied = false;
+                            this.log("Attack completed");
                         }
                     });
                 }
@@ -313,7 +367,15 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     // Add method to handle taking damage
     takeDamage(damage) {
+        const previousHealth = this.health;
         this.health -= damage;
+        
+        // Log damage taken
+        this.log("Took damage", {
+            damage: damage,
+            previousHealth: previousHealth,
+            currentHealth: this.health
+        });
         
         // Show damage number
         if (this.scene.createDamageNumber) {
@@ -333,12 +395,13 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         });
 
         if (this.health <= 0) {
+            this.log("Health depleted, dying");
             this.die();
         }
     }
 
     die() {
-        console.log('Enemy died!');
+        this.log("Enemy died");
         this.setActive(false);
         this.setVisible(false);
 
@@ -463,10 +526,30 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         const ladderExists = scene.ladder && scene.ladder.active;
         
         if (!ladderExists && remainingEnemies === 0) {
+            this.log("Last enemy killed, spawning ladder");
             scene.spawnLadder();
         }
+    }
 
-        // Update background music
-        //scene.updateBackgroundMusic();
+    // Add these logging methods to the Enemy class
+    log(message, data) {
+        if (!this.debugLogging) return;
+        
+        const timestamp = new Date().toISOString().substr(11, 8); // HH:MM:SS
+        console.log(`${timestamp} ${this.logPrefix}: ${message}`, data || '');
+    }
+
+    logWarning(message, data) {
+        if (!this.debugLogging) return;
+        
+        const timestamp = new Date().toISOString().substr(11, 8);
+        console.warn(`${timestamp} ${this.logPrefix}: ⚠️ ${message}`, data || '');
+    }
+
+    logError(message, error) {
+        if (!this.debugLogging) return;
+        
+        const timestamp = new Date().toISOString().substr(11, 8);
+        console.error(`${timestamp} ${this.logPrefix}: ❌ ${message}`, error || '');
     }
 }

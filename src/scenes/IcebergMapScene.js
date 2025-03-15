@@ -1,9 +1,11 @@
 class IcebergMapScene extends BaseMapScene {
     constructor() {
         super('IcebergMapScene');
+        this.logPrefix = "[❄️ ICEBERG]";
     }
 
     createMap() {
+        this.log("Creating Iceberg tilemap");
         super.createMap();
         
         // Iceberg-specific map creation
@@ -31,12 +33,16 @@ class IcebergMapScene extends BaseMapScene {
             this.buildingsLayer = this.map.createLayer('Buildings', tileset, 0, 0);
             this.buildingsLayer.setScale(2);
             this.buildingsLayer.setCollisionByExclusion([-1]);
+            this.log("Buildings layer created");
+        } else {
+            this.log("No Buildings layer found in tilemap");
         }
         
         // Set world bounds
         const worldWidth = this.map.widthInPixels * 2;
         const worldHeight = this.map.heightInPixels * 2;
         this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
+        this.log("World bounds set", { width: worldWidth, height: worldHeight });
         
         // Configure camera bounds only (don't follow player yet)
         this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
@@ -47,18 +53,29 @@ class IcebergMapScene extends BaseMapScene {
         if (this.penguin) {
             const worldWidth = this.map.widthInPixels * 2;
             const worldHeight = this.map.heightInPixels * 2;
-        this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
-        this.cameras.main.startFollow(this.penguin, true, 0.09, 0.09);
+            this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
+            this.cameras.main.startFollow(this.penguin, true, 0.09, 0.09);
+            this.log("Camera following player", { 
+                lerp: 0.09, 
+                worldWidth, 
+                worldHeight 
+            });
+        } else {
+            this.logWarning("Cannot setup camera - penguin not created yet");
         }
     }
 
     // Override the create method to call setupCamera after player creation
     create() {
+        this.log("Starting IcebergMapScene creation");
+        
         // Call the parent create method first
         super.create();
         
         // Now set up the camera to follow the player
         this.setupCamera();
+        
+        this.log("IcebergMapScene creation complete");
         
         // Debug visualization for collisions (uncomment to enable)
         // this.backgroundLayer.renderDebug(this.add.graphics(), {
@@ -69,6 +86,7 @@ class IcebergMapScene extends BaseMapScene {
     }
 
     setupPhysics() {
+        this.log("Setting up Iceberg physics");
         super.setupPhysics();
         
         // Iceberg-specific physics setup
@@ -98,6 +116,10 @@ class IcebergMapScene extends BaseMapScene {
             // Add collision between crates/barrels and floor layer edges
             this.physics.add.collider(this.crates, this.backgroundLayer);
             this.physics.add.collider(this.barrels, this.backgroundLayer);
+            
+            this.log("Background layer collisions set up");
+        } else {
+            this.logWarning("No background layer for collisions");
         }
         
         // Add collisions with buildings layer if it exists
@@ -125,6 +147,10 @@ class IcebergMapScene extends BaseMapScene {
             // Set up collisions with buildings layer for crates and barrels
             this.physics.add.collider(this.crates, this.buildingsLayer);
             this.physics.add.collider(this.barrels, this.buildingsLayer);
+            
+            this.log("Buildings layer collisions set up");
+        } else {
+            this.logWarning("No buildings layer for collisions");
         }
         
         // Add enemy-to-enemy collisions
@@ -138,9 +164,12 @@ class IcebergMapScene extends BaseMapScene {
         this.physics.add.collider(this.crates, this.crates);
         this.physics.add.collider(this.barrels, this.barrels);
         this.physics.add.collider(this.crates, this.barrels);
+        
+        this.log("Entity collisions set up");
     }
 
     spawnEntities() {
+        this.log("Spawning Iceberg entities");
         // Calculate difficulty parameters
         const diffParams = this.calculateDifficultyParams(this.floorLevel);
         
@@ -150,7 +179,10 @@ class IcebergMapScene extends BaseMapScene {
         // If no map spawn points were used or not enough entities were spawned,
         // fall back to the base implementation to spawn remaining entities
         if (!usedMapSpawnPoints) {
-        super.spawnEntities();
+            this.log("No map spawn points used, falling back to base implementation");
+            super.spawnEntities();
+        } else {
+            this.log("Entities spawned from map layers");
         }
     }
     
@@ -161,12 +193,15 @@ class IcebergMapScene extends BaseMapScene {
         const enemySpawnLayer = this.map.getObjectLayer('EnemySpawnPoints');
         if (enemySpawnLayer && enemySpawnLayer.objects && enemySpawnLayer.objects.length > 0) {
             // Use dedicated enemy spawn points if available
+            this.log("Found enemy spawn layer with", { count: enemySpawnLayer.objects.length });
             this.spawnEnemiesFromLayer(enemySpawnLayer.objects);
             entitiesSpawned = true;
         } else {
             // Fall back to generic SpawnPoints layer for enemies if no dedicated enemy spawn points
-        const spawnLayer = this.map.getObjectLayer('SpawnPoints');
+            const spawnLayer = this.map.getObjectLayer('SpawnPoints');
             if (spawnLayer && spawnLayer.objects && spawnLayer.objects.length > 0) {
+                this.log("Found generic spawn layer with", { count: spawnLayer.objects.length });
+                
                 // Filter out only enemy-type spawn points
                 const enemySpawnPoints = spawnLayer.objects.filter(point => {
                     if (!point.properties) return true; // Default to enemy if no properties
@@ -179,8 +214,11 @@ class IcebergMapScene extends BaseMapScene {
                 });
                 
                 if (enemySpawnPoints.length > 0) {
+                    this.log("Found enemy spawn points in generic layer", { count: enemySpawnPoints.length });
                     this.spawnEnemiesFromLayer(enemySpawnPoints);
                     entitiesSpawned = true;
+                } else {
+                    this.log("No enemy spawn points found in generic layer");
                 }
                 
                 // Process non-enemy spawn points separately
@@ -195,24 +233,35 @@ class IcebergMapScene extends BaseMapScene {
                 });
                 
                 if (otherSpawnPoints.length > 0) {
+                    this.log("Found non-enemy spawn points", { count: otherSpawnPoints.length });
                     this.spawnNonEnemyEntities(otherSpawnPoints);
                     entitiesSpawned = true;
+                } else {
+                    this.log("No non-enemy spawn points found");
                 }
+            } else {
+                this.log("No spawn layer found");
             }
         }
         
         // Spawn crates from CrateSpawnPoints layer (if it exists)
         const crateSpawnLayer = this.map.getObjectLayer('CrateSpawnPoints');
         if (crateSpawnLayer && crateSpawnLayer.objects && crateSpawnLayer.objects.length > 0) {
+            this.log("Found crate spawn layer with", { count: crateSpawnLayer.objects.length });
             this.spawnCratesFromLayer(crateSpawnLayer.objects);
             entitiesSpawned = true;
+        } else {
+            this.log("No crate spawn layer found");
         }
         
         // Spawn barrels from BarrelSpawnPoints layer (if it exists)
         const barrelSpawnLayer = this.map.getObjectLayer('BarrelSpawnPoints');
         if (barrelSpawnLayer && barrelSpawnLayer.objects && barrelSpawnLayer.objects.length > 0) {
+            this.log("Found barrel spawn layer with", { count: barrelSpawnLayer.objects.length });
             this.spawnBarrelsFromLayer(barrelSpawnLayer.objects);
             entitiesSpawned = true;
+        } else {
+            this.log("No barrel spawn layer found");
         }
         
         return entitiesSpawned;
@@ -220,6 +269,8 @@ class IcebergMapScene extends BaseMapScene {
     
     // New method to handle non-enemy entities from SpawnPoints layer
     spawnNonEnemyEntities(spawnPoints) {
+        this.log(`Spawning ${spawnPoints.length} non-enemy entities`);
+        
         // Process each spawn point based on its type property
         spawnPoints.forEach(point => {
             // Scale coordinates by 2 to match the tilemap scale
@@ -236,6 +287,11 @@ class IcebergMapScene extends BaseMapScene {
                 }
             }
             
+            this.log(`Spawning non-enemy entity`, { 
+                type: entityType, 
+                position: { x, y } 
+            });
+            
             // Spawn the appropriate entity based on type
             switch (entityType) {
                 case 'crate':
@@ -245,7 +301,7 @@ class IcebergMapScene extends BaseMapScene {
                     this.spawnCash(x, y);
                     break;
                 default:
-                    console.warn(`Unknown entity type: ${entityType}`);
+                    this.logWarning(`Unknown entity type: ${entityType}`);
             }
         });
     }
@@ -255,10 +311,11 @@ class IcebergMapScene extends BaseMapScene {
         const diffParams = this.calculateDifficultyParams(this.floorLevel);
         const totalEnemies = diffParams.enemyCount;
         
-        console.log(`IcebergMapScene: Spawning ${totalEnemies} enemies for floor level ${this.floorLevel}`);
+        this.log(`Spawning ${totalEnemies} enemies for floor level ${this.floorLevel}`);
         
         // If we have no spawn points, use the default spawning method
         if (!spawnPoints || spawnPoints.length === 0) {
+            this.logWarning("No spawn points provided, using default spawning method");
             // Use the parent spawnEntities method which now uses the type distribution
             super.spawnEntities();
             return;
@@ -269,6 +326,7 @@ class IcebergMapScene extends BaseMapScene {
         
         // Calculate how many enemies per spawn point on average (can be fractional)
         const enemiesPerPoint = totalEnemies / spawnPoints.length;
+        this.log(`Average enemies per spawn point: ${enemiesPerPoint.toFixed(2)}`);
         
         // Shuffle the spawn points to randomize which ones we use
         const shuffledPoints = Phaser.Utils.Array.Shuffle([...spawnPoints]);
@@ -319,7 +377,13 @@ class IcebergMapScene extends BaseMapScene {
                 }
             }
             
-            console.log(`IcebergMapScene: Spawning enemy #${enemiesSpawned+1} at point (${baseX}, ${baseY}) with offset (${offsetX}, ${offsetY}), type: ${enemyType}`);
+            this.log(`Spawning enemy #${enemiesSpawned+1}`, { 
+                position: { x, y }, 
+                basePosition: { x: baseX, y: baseY },
+                offset: { x: offsetX, y: offsetY }, 
+                type: enemyType 
+            });
+            
             this.spawnEnemy(enemyType, x, y);
             enemiesSpawned++;
         }
@@ -355,7 +419,13 @@ class IcebergMapScene extends BaseMapScene {
                 random -= weight;
             }
             
-            console.log(`IcebergMapScene: Spawning additional enemy #${enemiesSpawned+1} at point (${baseX}, ${baseY}) with offset (${offsetX}, ${offsetY}), type: ${selectedType}`);
+            this.log(`Spawning additional enemy #${enemiesSpawned+1}`, { 
+                position: { x, y }, 
+                basePosition: { x: baseX, y: baseY },
+                offset: { x: offsetX, y: offsetY }, 
+                type: selectedType 
+            });
+            
             this.spawnEnemy(selectedType, x, y);
             enemiesSpawned++;
         }
@@ -364,6 +434,8 @@ class IcebergMapScene extends BaseMapScene {
     spawnCratesFromLayer(spawnPoints) {
         // Shuffle the spawn points to randomize which ones we use
         const shuffledPoints = Phaser.Utils.Array.Shuffle([...spawnPoints]);
+        
+        this.log(`Spawning ${shuffledPoints.length} crates from layer`);
         
         // Spawn crates at the selected points (use all of them)
         for (let i = 0; i < shuffledPoints.length; i++) {
@@ -380,6 +452,8 @@ class IcebergMapScene extends BaseMapScene {
     spawnBarrelsFromLayer(spawnPoints) {
         // Shuffle the spawn points to randomize which ones we use
         const shuffledPoints = Phaser.Utils.Array.Shuffle([...spawnPoints]);
+        
+        this.log(`Spawning ${shuffledPoints.length} barrels from layer`);
         
         // Spawn barrels at the selected points (use all of them)
         for (let i = 0; i < shuffledPoints.length; i++) {
@@ -418,10 +492,6 @@ class IcebergMapScene extends BaseMapScene {
                         bullet.destroy();
                         this.createBulletImpactEffect(bullet.x, bullet.y);
                         
-                        // Debug: Check what type of object barrel is
-                        console.log('Barrel object:', barrel);
-                        console.log('Is Crate instance:', barrel instanceof Crate);
-                        
                         // Try to damage the barrel with error handling
                         try {
                             if (typeof barrel.takeDamage === 'function') {
@@ -429,12 +499,12 @@ class IcebergMapScene extends BaseMapScene {
                                 
                                 // If barrel is destroyed, handle explosion
                                 if (barrel.health <= 0) {
-                                    console.log('Barrel health reached zero, triggering explosion');
+                                    this.log('Barrel health reached zero, triggering explosion');
                                     this.handleCrateExplosion(barrel);
                                 }
                             } else {
                                 // Fallback if takeDamage is not a function
-                                console.warn('takeDamage is not a function on barrel');
+                                this.logWarning('takeDamage is not a function on barrel');
                                 
                                 // Add health property if it doesn't exist
                                 if (barrel.health === undefined) {
@@ -446,12 +516,12 @@ class IcebergMapScene extends BaseMapScene {
                                 
                                 // If barrel is destroyed, handle explosion
                                 if (barrel.health <= 0) {
-                                    console.log('Barrel health reached zero (fallback), triggering explosion');
+                                    this.log('Barrel health reached zero (fallback), triggering explosion');
                                     this.handleCrateExplosion(barrel);
                                 }
                             }
                         } catch (error) {
-                            console.error('Error handling barrel damage:', error);
+                            this.logError('Error handling barrel damage:', error);
                         }
                     },
                     null,
@@ -489,5 +559,43 @@ class IcebergMapScene extends BaseMapScene {
             // Flip gun sprite based on angle
             this.penguin.gun.gunSprite.flipY = Math.abs(angle) > Math.PI / 2;
         }
+    }
+
+    // Add this method to the IcebergMapScene class
+    resetScene() {
+        this.log("Resetting IcebergMapScene");
+        
+        // Call parent resetScene method first
+        super.resetScene();
+        
+        // Add IcebergMapScene-specific reset logic
+        if (this.buildingsLayer) {
+            this.buildingsLayer = null;
+        }
+        
+        // Any other IcebergMapScene-specific properties to reset
+        this.log("IcebergMapScene reset complete");
+    }
+    
+    // Add logging methods if they don't exist in BaseMapScene
+    log(message, data) {
+        if (!this.debugLogging) return;
+        
+        const timestamp = new Date().toISOString().substr(11, 8); // HH:MM:SS
+        console.log(`${timestamp} ${this.logPrefix}: ${message}`, data || '');
+    }
+
+    logWarning(message, data) {
+        if (!this.debugLogging) return;
+        
+        const timestamp = new Date().toISOString().substr(11, 8);
+        console.warn(`${timestamp} ${this.logPrefix}: ⚠️ ${message}`, data || '');
+    }
+
+    logError(message, error) {
+        if (!this.debugLogging) return;
+        
+        const timestamp = new Date().toISOString().substr(11, 8);
+        console.error(`${timestamp} ${this.logPrefix}: ❌ ${message}`, error || '');
     }
 } 

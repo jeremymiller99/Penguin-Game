@@ -39,6 +39,78 @@ class RangedEnemy extends Enemy {
         this.gun.currentAmmo = 999; // Infinite ammo for enemies
         this.gun.maxAmmo = 999;
         
+        // Set up bullet collisions
+        if (scene.physics && scene.penguin) {
+            // Collide with player
+            scene.physics.add.collider(
+                this.gun.bullets,
+                scene.penguin,
+                (bullet, player) => {
+                    // Destroy the bullet first
+                    bullet.destroy();
+                    
+                    // Create impact effect
+                    scene.createBulletImpactEffect(bullet.x, bullet.y);
+                    
+                    // Use the scene's centralized damage handling system
+                    // This ensures consistent behavior between enemy and player damage
+                    scene.handleDamage(player, this.gun.damage);
+                }
+            );
+            
+            // Collide with crates
+            scene.physics.add.collider(
+                this.gun.bullets,
+                scene.crates,
+                (bullet, crate) => {
+                    if (!bullet.active || !crate.active) return;
+                    
+                    bullet.destroy();
+                    scene.createBulletImpactEffect(bullet.x, bullet.y);
+                    scene.handleDamage(crate, this.gun.damage);
+                }
+            );
+            
+            // Collide with barrels
+            scene.physics.add.collider(
+                this.gun.bullets,
+                scene.barrels,
+                (bullet, barrel) => {
+                    if (!bullet.active || !barrel.active) return;
+                    
+                    bullet.destroy();
+                    scene.createBulletImpactEffect(bullet.x, bullet.y);
+                    scene.handleDamage(barrel, this.gun.damage);
+                }
+            );
+            
+            // Collide with walls/background
+            if (scene.buildingsLayer) {
+                scene.physics.add.collider(
+                    this.gun.bullets,
+                    scene.buildingsLayer,
+                    (bullet) => {
+                        if (!bullet.active) return;
+                        
+                        bullet.destroy();
+                        scene.createBulletImpactEffect(bullet.x, bullet.y);
+                    }
+                );
+            }
+            if (scene.backgroundLayer) {
+                scene.physics.add.collider(
+                    this.gun.bullets,
+                    scene.backgroundLayer,
+                    (bullet) => {
+                        if (!bullet.active) return;
+                        
+                        bullet.destroy();
+                        scene.createBulletImpactEffect(bullet.x, bullet.y);
+                    }
+                );
+            }
+        }
+        
         // Create a laser sight with high visibility
         this.laserSight = scene.add.graphics();
         this.laserSight.setDepth(5);
@@ -80,21 +152,46 @@ class RangedEnemy extends Enemy {
         // Flip the enemy to face the player
         this.flipX = player.x < this.x;
         
+        // Track state changes for logging
+        const previousState = {
+            isTooClose: this._isTooClose,
+            isInRange: this._isInRange,
+            isTooFar: this._isTooFar,
+            isTargeting: this.targetingCircle && this.targetingCircle.visible
+        };
+        
+        // Update current state
+        this._isTooClose = distance < 150;
+        this._isInRange = distance >= 150 && distance <= this.attackRange;
+        this._isTooFar = distance > this.attackRange;
+        
         // Movement behavior: keep distance from player
-        if (distance < 150) {
+        if (this._isTooClose) {
             // Too close, back away
+            if (!previousState.isTooClose) {
+                this.log("Player too close, backing away", { distance });
+            }
+            
             const angle = Phaser.Math.Angle.Between(player.x, player.y, this.x, this.y);
             this.setVelocity(
                 Math.cos(angle) * this.speed,
                 Math.sin(angle) * this.speed
             );
             this.play('enemy_walk', true);
-        } else if (distance > this.attackRange) {
+        } else if (this._isTooFar) {
             // Too far, move closer using simple movement
+            if (!previousState.isTooFar) {
+                this.log("Player out of range, moving closer", { distance });
+            }
+            
             this.moveTowardsPlayer(player);
             this.play('enemy_walk', true);
         } else {
             // In ideal range, stop moving
+            if (!previousState.isInRange) {
+                this.log("In ideal firing range, stopping movement", { distance });
+            }
+            
             this.setVelocity(0, 0);
             this.play('ranged_enemy_idle', true);
         }
@@ -127,6 +224,10 @@ class RangedEnemy extends Enemy {
             // Only shoot when in range and after cooldown
             if (distance < this.attackRange && time - this.lastFireTime > this.gun.fireDelay) {
                 // Show targeting animation before shooting
+                if (!previousState.isTargeting) {
+                    this.log("Targeting player for ranged attack");
+                }
+                
                 this.targetingCircle.setVisible(true);
                 this.targetingCircle.setPosition(player.x, player.y);
                 
@@ -140,6 +241,7 @@ class RangedEnemy extends Enemy {
                         const fired = this.gun.fire(time);
                         
                         if (fired) {
+                            this.log("Fired ranged attack at player");
                             // Update last fire time
                             this.lastFireTime = time;
                             this.lastAttackTime = time; // Keep this for compatibility

@@ -11,8 +11,9 @@ class Map extends Phaser.Scene {
         this.nodes = [];
         this.connections = [];
         this.currentNode = null;  // Will store just the current node ID
-        this.completedNodes = new Set();
-        this.availableNodes = new Set();
+        this.completedNodes = [];
+        this.availableNodes = [1]; // Start with node 1 available
+        this.traversedPaths = [];
     }
 
     create() {
@@ -46,8 +47,8 @@ class Map extends Phaser.Scene {
             // Map exists, load it from registry
             this.nodes = existingMap.nodes;
             this.connections = existingMap.connections;
-            this.completedNodes = new Set(existingMap.completedNodes);
-            this.availableNodes = new Set(existingMap.availableNodes);
+            this.completedNodes = existingMap.completedNodes;
+            this.availableNodes = existingMap.availableNodes;
             this.currentNode = existingMap.currentNode;
         }
 
@@ -686,12 +687,12 @@ class Map extends Phaser.Scene {
         
         // Check completion status if not provided
         if (isCompleted === undefined) {
-            isCompleted = this.completedNodes.has(node.id);
+            isCompleted = this.completedNodes.includes(node.id);
         }
         
         // Get node state to determine availability
         const state = this.getNodeState(node);
-        const isAvailable = state === NodeState.AVAILABLE_ACTIVE || state === NodeState.AVAILABLE_COMPLETED;
+        const isAvailable = this.availableNodes.includes(node.id);
         
         // Build status text based on node state
         let statusText;
@@ -773,14 +774,14 @@ class Map extends Phaser.Scene {
                 this.currentNode = node.id;
                 
                 // If this is an unbeaten node, start the level
-                if (!this.completedNodes.has(node.id)) {
+                if (!this.completedNodes.includes(node.id)) {
                     // Update registry before starting level
                     const gameMap = this.registry.get('gameMap');
                     this.registry.set('gameMap', {
                         ...gameMap,
                         currentNode: this.currentNode,
-                        completedNodes: Array.from(this.completedNodes),
-                        availableNodes: Array.from(this.availableNodes)
+                        completedNodes: this.completedNodes,
+                        availableNodes: this.availableNodes
                     });
                     
                     if (node.type === 'PERK') {
@@ -803,8 +804,8 @@ class Map extends Phaser.Scene {
                     this.registry.set('gameMap', {
                         ...gameMap,
                         currentNode: this.currentNode,
-                        completedNodes: Array.from(this.completedNodes),
-                        availableNodes: Array.from(this.availableNodes)
+                        completedNodes: this.completedNodes,
+                        availableNodes: this.availableNodes
                     });
                     
                     this.updateNodeStates();
@@ -878,15 +879,16 @@ class Map extends Phaser.Scene {
     }
 
     getNodeState(node) {
-        const isCompleted = this.completedNodes.has(node.id);
-        const isConnectedToCurrent = this.isNodeConnected(node.id, this.currentNode);
-
+        // Check if node is completed (using array includes instead of Set has)
+        const isCompleted = this.completedNodes.includes(node.id);
+        
+        // Check if node is available
+        const isAvailable = this.availableNodes.includes(node.id);
+        
         if (isCompleted) {
-            // Completed nodes are available if connected to current position
-            return isConnectedToCurrent ? NodeState.AVAILABLE_COMPLETED : NodeState.UNAVAILABLE_COMPLETED;
+            return isAvailable ? NodeState.AVAILABLE_COMPLETED : NodeState.UNAVAILABLE_COMPLETED;
         } else {
-            // Unbeaten nodes are available if connected to current position
-            return isConnectedToCurrent ? NodeState.AVAILABLE_ACTIVE : NodeState.UNAVAILABLE_ACTIVE;
+            return isAvailable ? NodeState.AVAILABLE_ACTIVE : NodeState.UNAVAILABLE_ACTIVE;
         }
     }
 
@@ -952,7 +954,7 @@ class Map extends Phaser.Scene {
             node.glow = null;
 
             const state = this.getNodeState(node);
-            const isCompleted = this.completedNodes.has(node.id);
+            const isCompleted = this.completedNodes.includes(node.id);
             
             // Keep icebergs at full opacity and natural color always
             node.sprite.clearTint().setAlpha(1);
@@ -1086,7 +1088,7 @@ class Map extends Phaser.Scene {
             const isToCurrent = toNode.id === this.currentNode;
             
             // Check if both nodes are completed (traversed path)
-            const isTraversed = this.completedNodes.has(fromNode.id) && this.completedNodes.has(toNode.id);
+            const isTraversed = this.completedNodes.includes(fromNode.id) && this.completedNodes.includes(toNode.id);
             
             // A path is active if:
             // 1. It connects to the current node and leads to an available node
@@ -1348,7 +1350,7 @@ class Map extends Phaser.Scene {
             const fromNode = this.nodes.find(n => n.id === connection.fromNodeId);
             const toNode = this.nodes.find(n => n.id === connection.toNodeId);
             
-            if (this.completedNodes.has(fromNode.id) && this.completedNodes.has(toNode.id)) {
+            if (this.completedNodes.includes(fromNode.id) && this.completedNodes.includes(toNode.id)) {
                 connection.isTraversed = true;
             }
         });
@@ -1359,13 +1361,13 @@ class Map extends Phaser.Scene {
 
     completeNode(nodeId) {
         // Mark the node as completed
-        this.completedNodes.add(nodeId);
+        this.completedNodes.push(nodeId);
         
         // Update available nodes based on connections
         const node = this.nodes.find(n => n.id === nodeId);
         if (node) {
             node.connections.forEach(connId => {
-                this.availableNodes.add(connId);
+                this.availableNodes.push(connId);
             });
         }
         
@@ -1374,12 +1376,74 @@ class Map extends Phaser.Scene {
         this.registry.set('gameMap', {
             ...gameMap,
             currentNode: nodeId,
-            completedNodes: Array.from(this.completedNodes),
-            availableNodes: Array.from(this.availableNodes)
+            completedNodes: this.completedNodes,
+            availableNodes: this.availableNodes
         });
         
         // Update visual states
         this.updateNodeStates();
         this.updateConnectionStates();
+    }
+
+    resetMapData() {
+        // Reset all map-related data
+        this.nodes = [];
+        this.connections = [];
+        this.completedNodes = [];
+        this.availableNodes = [1]; // Reset to just the starting node
+        this.currentNode = 1;
+        this.traversedPaths = [];
+        
+        // Clear any existing graphics or sprites
+        if (this.nodeSprites) {
+            this.nodeSprites.forEach(sprite => {
+                if (sprite && sprite.destroy) sprite.destroy();
+            });
+            this.nodeSprites = [];
+        }
+        
+        // Clear connection graphics properly
+        if (this.connectionGraphics) {
+            this.connectionGraphics.forEach(connection => {
+                if (connection.graphics && connection.graphics.clear) {
+                    connection.graphics.clear();
+                }
+                if (connection.graphics && connection.graphics.destroy) {
+                    connection.graphics.destroy();
+                }
+            });
+            this.connectionGraphics = [];
+        }
+        
+        // Clear connection container
+        if (this.connectionContainer) {
+            this.connectionContainer.destroy();
+            this.connectionContainer = null;
+        }
+        
+        // Clear penguin marker
+        if (this.penguinMarker && this.penguinMarker.destroy) {
+            this.penguinMarker.destroy();
+            this.penguinMarker = null;
+        }
+        
+        // Clear any node info
+        if (this.nodeInfo) {
+            this.nodeInfo.destroy();
+            this.nodeInfo = null;
+        }
+        
+        // Clear whitecaps and ocean elements
+        if (this.whitecapsContainer) {
+            this.whitecapsContainer.destroy();
+            this.whitecapsContainer = null;
+        }
+        
+        if (this.whitecapPool) {
+            this.whitecapPool = [];
+        }
+        
+        // Reset any other map-specific properties
+        this.isMapCreated = false;
     }
 } 

@@ -11,6 +11,9 @@ class MeleeEnemy extends Enemy {
             type: 'Melee'       // Add type for nametag
         });
         
+        // Store the attack damage
+        this.attackDamage = 19; // Ensure this is explicitly set
+        
         // Increase the size
         this.setScale(1.8);
         
@@ -36,7 +39,7 @@ class MeleeEnemy extends Enemy {
     }
 
     update(player, time) {
-        // Call the parent update method, which now includes pathfinding
+        // Call the parent update method, which now includes more selective logging
         super.update(player, time);
         
         // Store current position for trail effect
@@ -81,40 +84,67 @@ class MeleeEnemy extends Enemy {
     }
 
     attack(player, time) {
+        // Don't attack if game is frozen
+        if (this.scene.isGameFrozen) return;
+        
         if (time - this.lastAttackTime > this.attackCooldown && !this.isAttacking) {
+            // Log attack only once at the beginning
+            this.log("Performing melee dash attack", { 
+                attackDamage: this.attackDamage
+            });
+            
             // Set attack flags
             this.isAttacking = true;
             this.hasDamageBeenApplied = false;
             
-            // Deal damage to player
-            if (!this.hasDamageBeenApplied) {
-                player.takeDamage(this.damage);
-                this.hasDamageBeenApplied = true;
-            }
+            // Store original position for animation
+            const originalX = this.x;
+            const originalY = this.y;
             
-            this.lastAttackTime = time;
+            // Calculate target position (slightly closer to player)
+            const angle = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
+            const distance = Math.min(30, Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y) * 0.5);
+            const targetX = this.x + Math.cos(angle) * distance;
+            const targetY = this.y + Math.sin(angle) * distance;
             
             // Add a quick dash attack animation
             this.scene.tweens.add({
                 targets: this,
-                x: player.x,
-                y: player.y,
+                x: targetX,
+                y: targetY,
                 duration: 80,  // Faster animation
-                yoyo: true,
-                ease: 'Power2',
-                onStart: () => {
-                    // Flash effect
-                    this.setTint(0xffffff);
-                },
+                ease: 'Power1',
                 onComplete: () => {
-                    this.clearTint();
-                    this.setTint(0xff9999); // Restore original tint
+                    // Deal damage at the peak of the lunge, but only if not already applied
+                    if (!this.hasDamageBeenApplied) {
+                        this.scene.handleDamage(player, this.attackDamage);
+                        this.hasDamageBeenApplied = true;
+                    }
                     
-                    // Reset attack flags
-                    this.isAttacking = false;
-                    this.hasDamageBeenApplied = false;
+                    // Return to original position
+                    this.scene.tweens.add({
+                        targets: this,
+                        x: originalX,
+                        y: originalY,
+                        duration: 200,
+                        ease: 'Power2',
+                        onComplete: () => {
+                            // Reset attack flags when animation is complete
+                            this.isAttacking = false;
+                            this.hasDamageBeenApplied = false;
+                            this.clearTint();
+                            this.setTint(0xff9999); // Restore original tint
+                            this.log("Melee attack completed");
+                        }
+                    });
                 }
             });
+            
+            // Flash effect
+            this.setTint(0xffffff);
+            
+            // Update last attack time
+            this.lastAttackTime = time;
         }
     }
     
