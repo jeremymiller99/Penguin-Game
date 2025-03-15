@@ -114,8 +114,8 @@ class TestLevel extends Phaser.Scene {
 
         // Add penguin sprite and properties
         this.penguin = this.add.sprite(this.game.config.width / 2, this.game.config.height / 2, 'penguin').setScale(2);
-        this.penguin.health = 100;
-        this.penguin.maxHealth = 100;
+        this.penguin.health = 102;  // Adjusted to survive 6 hits from basic enemies (17 damage per hit)
+        this.penguin.maxHealth = 102;
         this.moveSpeed = 200;
 
         // Enable physics on the penguin sprite and make it a dynamic body
@@ -700,7 +700,7 @@ class TestLevel extends Phaser.Scene {
         });
 
         // Update health bars
-        const playerHealthPercent = this.penguin.health / this.penguin.maxHealth;
+        const playerHealthPercent = Math.max(0, this.penguin.health) / this.penguin.maxHealth;
         this.playerHealthBar.foreground.width = 160 * playerHealthPercent;
         
         // Update minimap player position
@@ -742,75 +742,84 @@ class TestLevel extends Phaser.Scene {
     checkPenguinDeath() {
         if (this.penguin.health > 0) return;
 
-        this.penguin.setVisible(false);
-
-        // Play explosion soundd
-        this.sound.play('death', {
-            volume: 1,
-            rate: 1 + Math.random() * 0.5  // Random pitch between 1.0 and 1.5
-        });
-
-        // Create explosion effect
-        const particleCount = 30;  // More particles
-        const colors = [0xff0000, 0xff6600, 0xffff00, 0xffffff]; // Added white for extra pop
+        // Ensure health is exactly 0 for visual consistency
+        this.penguin.health = 0;
         
-        // Create blood splatter effect
-        for (let ring = 0; ring < 3; ring++) { // Reduced ring count
-            const delay = ring * 35; // Slower sequence
-            const scale = 2 + (ring * 0.6); // Smaller scaling
+        // Update health bar one last time to show 0 health
+        const playerHealthPercent = 0;
+        this.playerHealthBar.foreground.width = 160 * playerHealthPercent;
+        
+        // Add a small delay before freezing the game to allow health bar to update
+        this.time.delayedCall(100, () => {
+            this.penguin.setVisible(false);
+            this.isGameFrozen = true;
+            this.physics.pause();
+
+            // Play explosion sound
+            this.sound.play('death', {
+                volume: 1,
+                rate: 1 + Math.random() * 0.5  // Random pitch between 1.0 and 1.5
+            });
+
+            // Create explosion effect
+            const particleCount = 30;  // More particles
+            const colors = [0xff0000, 0xff6600, 0xffff00, 0xffffff]; // Added white for extra pop
             
-            for (let i = 0; i < particleCount; i++) {
-                // Create random angles for splatter look
-                const angle = (i / particleCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
-                const speed = 200 + Math.random() * 300; // Lower speeds
-                const distance = 5 + Math.random() * 20;
+            // Create blood splatter effect
+            for (let ring = 0; ring < 3; ring++) { // Reduced ring count
+                const delay = ring * 35; // Slower sequence
+                const scale = 2 + (ring * 0.6); // Smaller scaling
                 
-                // Create blood droplet particle
-                const particle = this.add.sprite(
-                    this.penguin.x + Math.cos(angle) * distance,
-                    this.penguin.y + Math.sin(angle) * distance,
-                    'bullet'
-                );
-                
-                // Set to red tint
-                particle.setTint(0xff0000);
-                particle.setScale(scale * (0.5 + Math.random()));
-                particle.setAlpha(0.7 + Math.random() * 0.2);
-                
-                // Add rotation to particles
-                particle.rotation = Math.random() * Math.PI * 2;
-                
-                this.time.delayedCall(delay, () => {
-                    // Initial "burst" tween
-                    this.tweens.add({
-                        targets: particle,
-                        scale: particle.scale * 1.2,
-                        duration: 100,
-                        onComplete: () => {
-                            // Main trajectory tween
-                            this.tweens.add({
-                                targets: particle,
-                                x: particle.x + Math.cos(angle) * speed,
-                                y: particle.y + Math.sin(angle) * speed + 200, // Less gravity
-                                alpha: 0,
-                                scale: scale * 0.2,
-                                rotation: particle.rotation + (Math.random() * 3 - 1.5) * Math.PI,
-                                duration: 600 + Math.random() * 300,
-                                ease: 'Power3.easeOut',
-                                onComplete: () => particle.destroy()
-                            });
-                        }
+                for (let i = 0; i < particleCount; i++) {
+                    // Create random angles for splatter look
+                    const angle = (i / particleCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
+                    const speed = 200 + Math.random() * 300; // Lower speeds
+                    const distance = 5 + Math.random() * 20;
+                    
+                    // Create blood droplet particle
+                    const particle = this.add.sprite(
+                        this.penguin.x + Math.cos(angle) * distance,
+                        this.penguin.y + Math.sin(angle) * distance,
+                        'bullet'
+                    );
+                    
+                    // Set to red tint
+                    particle.setTint(0xff0000);
+                    particle.setScale(scale * (0.5 + Math.random()));
+                    particle.setAlpha(0.7 + Math.random() * 0.2);
+                    
+                    // Add rotation to particles
+                    particle.rotation = Math.random() * Math.PI * 2;
+                    
+                    this.time.delayedCall(delay, () => {
+                        // Initial "burst" tween
+                        this.tweens.add({
+                            targets: particle,
+                            scale: particle.scale * 1.2,
+                            duration: 100,
+                            onComplete: () => {
+                                // Main trajectory tween
+                                this.tweens.add({
+                                    targets: particle,
+                                    x: particle.x + Math.cos(angle) * speed,
+                                    y: particle.y + Math.sin(angle) * speed + 200, // Less gravity
+                                    alpha: 0,
+                                    scale: scale * 0.2,
+                                    rotation: particle.rotation + (Math.random() * 3 - 1.5) * Math.PI,
+                                    duration: 600 + Math.random() * 300,
+                                    ease: 'Power3.easeOut',
+                                    onComplete: () => particle.destroy()
+                                });
+                            }
+                        });
                     });
-                });
+                }
             }
-        }
 
-        this.isGameFrozen = true;
-        this.physics.pause();
-
-        // Show death screen after a short delay to let particles play
-        this.time.delayedCall(800, () => {
-            this.showDeathScreen();
+            // Show death screen after a short delay to let particles play
+            this.time.delayedCall(800, () => {
+                this.showDeathScreen();
+            });
         });
     }
 
@@ -1252,12 +1261,14 @@ class TestLevel extends Phaser.Scene {
     }
 
     spawnLadder() {
-        // Find a random position away from walls and other objects
+        // Find a valid position on a walkable tile (tile index 9)
         let validPosition = false;
         let x, y;
+        let attempts = 0;
+        const maxAttempts = 50; // Limit attempts to prevent infinite loops
         
-        while (!validPosition) {
-            // Use world bounds instead of game config width/height
+        while (!validPosition && attempts < maxAttempts) {
+            // Generate random position
             x = Phaser.Math.Between(100, this.physics.world.bounds.width - 100);
             y = Phaser.Math.Between(100, this.physics.world.bounds.height - 100);
             
@@ -1265,9 +1276,34 @@ class TestLevel extends Phaser.Scene {
                 x, y, this.penguin.x, this.penguin.y
             );
             
+            // Check if this position is far enough from the player
             if (distanceFromPenguin > 100) {
-                validPosition = true;
+                // Check if this position is on a walkable tile (index 9)
+                if (this.backgroundLayer) {
+                    // Convert world coordinates to tile coordinates
+                    const tileX = Math.floor(x / (this.backgroundLayer.scaleX * this.map.tileWidth));
+                    const tileY = Math.floor(y / (this.backgroundLayer.scaleY * this.map.tileHeight));
+                    
+                    // Get the tile at this position
+                    const tile = this.backgroundLayer.getTileAt(tileX, tileY);
+                    
+                    // Check if it's a walkable tile (index 9)
+                    if (tile && tile.index === 9) {
+                        validPosition = true;
+                        console.log(`Ladder spawned on walkable tile at (${x}, ${y}), tile coordinates (${tileX}, ${tileY})`);
+                    }
+                } else {
+                    // If there's no background layer, just use the random position
+                    validPosition = true;
+                    console.log(`No background layer found, ladder spawned at random position (${x}, ${y})`);
+                }
             }
+            
+            attempts++;
+        }
+        
+        if (!validPosition) {
+            console.warn(`Could not find a walkable tile for ladder after ${maxAttempts} attempts. Using last attempted position.`);
         }
         
         this.ladder = new Ladder(this, x, y);
@@ -1389,12 +1425,15 @@ class TestLevel extends Phaser.Scene {
             const damage = Math.floor(50 * (1 - distToPenguin/explosionRadius));
             if (this.penguin.health) {
                 this.penguin.health -= damage;
+                
+                // Show damage number
+                this.createDamageNumber(this.penguin.x, this.penguin.y, damage);
+                
+                this.penguin.setTint(0xff0000);
+                this.time.delayedCall(100, () => {
+                    this.penguin.clearTint();
+                });
             }
-            
-            this.penguin.setTint(0xff0000);
-            this.time.delayedCall(100, () => {
-                this.penguin.clearTint();
-            });
         }
 
         // Check if any enemies are within blast radius
@@ -1402,7 +1441,9 @@ class TestLevel extends Phaser.Scene {
             const distToEnemy = Phaser.Math.Distance.Between(explosionX, explosionY, enemy.x, enemy.y);
             if (distToEnemy < explosionRadius) {
                 const damage = Math.floor(100 * (1 - distToEnemy/explosionRadius));
-                enemy.takeDamage(damage);
+                if (enemy.takeDamage) {
+                    enemy.takeDamage(damage);
+                }
             }
         });
 
@@ -1418,9 +1459,6 @@ class TestLevel extends Phaser.Scene {
                 }
             }
         });
-
-        // Trigger the crate explosion effects
-        crate.explode();
     }
 
     spawnCrate() {
@@ -1837,7 +1875,9 @@ class TestLevel extends Phaser.Scene {
             const distance = Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y);
             if (distance <= finalRadius) {
                 const damage = Math.floor(5 * (1 - distance/finalRadius));
-                enemy.takeDamage(damage);
+                if (damage > 0 && enemy.takeDamage) {
+                    enemy.takeDamage(damage);
+                }
             }
         });
         
@@ -1845,13 +1885,18 @@ class TestLevel extends Phaser.Scene {
         const distToPlayer = Phaser.Math.Distance.Between(x, y, this.penguin.x, this.penguin.y);
         if (distToPlayer <= finalRadius && !this.penguin.isExplosionImmune) {
             const damage = Math.floor(3 * (1 - distToPlayer/finalRadius));
-            this.penguin.health -= damage;
-            
-            // Flash player
-            this.penguin.setTint(0xff0000);
-            this.time.delayedCall(100, () => {
-                this.penguin.clearTint();
-            });
+            if (damage > 0) {
+                this.penguin.health -= damage;
+                
+                // Show damage number
+                this.createDamageNumber(this.penguin.x, this.penguin.y, damage);
+                
+                // Flash player
+                this.penguin.setTint(0xff0000);
+                this.time.delayedCall(100, () => {
+                    this.penguin.clearTint();
+                });
+            }
         }
         
         // Add sound effect
@@ -1924,5 +1969,38 @@ class TestLevel extends Phaser.Scene {
                 onComplete: () => particle.destroy()
             });
         }
+    }
+
+    // Add a utility function to create damage number popups
+    createDamageNumber(x, y, amount, isHealing = false) {
+        // Choose color based on whether it's damage or healing
+        const color = isHealing ? '#00ff00' : '#ff0000';
+        const prefix = isHealing ? '+' : '-';
+        
+        // Create text object
+        const damageText = this.add.text(x, y - 20, prefix + amount, {
+            fontFamily: 'Arial',
+            fontSize: '20px',
+            fontStyle: 'bold',
+            color: color,
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+        
+        // Set depth to ensure it's visible above other elements
+        damageText.setDepth(1000);
+        
+        // Animate the text
+        this.tweens.add({
+            targets: damageText,
+            y: damageText.y - 50, // Float upward
+            alpha: 0,
+            scale: 1.5,
+            duration: 1000,
+            ease: 'Power2',
+            onComplete: () => {
+                damageText.destroy();
+            }
+        });
     }
 }

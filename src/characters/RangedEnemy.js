@@ -3,15 +3,16 @@ class RangedEnemy extends Enemy {
         // Configure ranged enemy properties
         super(scene, x, y, {
             texture: 'enemy',
-            health: 70,
-            damage: 15,
+            health: 45,         // Same as basic enemy (killed in 3 shots)
+            damage: 21,         // 1.25x basic enemy damage (17 * 1.25 ≈ 21)
             speed: 80,
             attackRange: 300,
-            attackCooldown: 1500
+            attackCooldown: 1500,
+            type: 'Ranged'  // Add type for nametag
         });
         
-        // Make it slightly larger and add a distinctive tint
-        this.setScale(1.2);
+        // Make it larger and add a distinctive tint
+        this.setScale(1.8);
         this.setTint(0x99ccff);
         
         console.log("Creating ranged enemy with gun");
@@ -32,7 +33,7 @@ class RangedEnemy extends Enemy {
         this.gun.assignToPlayer(this);
         
         // Customize gun properties for enemy
-        this.gun.damage = 10;
+        this.gun.damage = 21;  // Match the enemy's damage value
         this.gun.fireDelay = 1500; // Slower firing rate than player
         this.gun.bulletSpeed = 500; // Slightly slower bullets that player can dodge
         this.gun.currentAmmo = 999; // Infinite ammo for enemies
@@ -89,8 +90,8 @@ class RangedEnemy extends Enemy {
             );
             this.play('enemy_walk', true);
         } else if (distance > this.attackRange) {
-            // Too far, move closer
-            this.scene.physics.moveToObject(this, player, this.speed);
+            // Too far, move closer using simple movement
+            this.moveTowardsPlayer(player);
             this.play('enemy_walk', true);
         } else {
             // In ideal range, stop moving

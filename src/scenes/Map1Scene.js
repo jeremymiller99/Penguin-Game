@@ -150,10 +150,8 @@ class Map1Scene extends BaseMapScene {
         // fall back to the base implementation to spawn remaining entities
         if (!usedMapSpawnPoints) {
             super.spawnEntities();
-        } else {
-            // Just spawn the ladder if we used map spawn points
-            this.spawnLadder();
         }
+        // Removed ladder spawning - ladder will only spawn after all enemies are dead
     }
     
     spawnEntitiesFromMapLayers() {
@@ -188,30 +186,106 @@ class Map1Scene extends BaseMapScene {
         const diffParams = this.calculateDifficultyParams(this.floorLevel);
         const maxEnemies = diffParams.enemyCount;
         
-        // Limit the number of spawn points to use
-        const pointsToUse = Math.min(spawnPoints.length, maxEnemies);
+        console.log(`Map1Scene: Spawning ${maxEnemies} enemies for floor level ${this.floorLevel}`);
+        
+        // If we have no spawn points, use the default spawning method
+        if (!spawnPoints || spawnPoints.length === 0) {
+            // Use the parent spawnEntities method which now uses the type distribution
+            super.spawnEntities();
+            return;
+        }
+        
+        // Instead of limiting to spawn points, we'll distribute enemies among available points
+        // This allows multiple enemies to spawn at the same point with offsets
         
         // Shuffle the spawn points to randomize which ones we use
         const shuffledPoints = Phaser.Utils.Array.Shuffle([...spawnPoints]);
         
-        // Spawn enemies at the selected points
-        for (let i = 0; i < pointsToUse; i++) {
+        // Counter for spawned enemies
+        let enemiesSpawned = 0;
+        
+        // First pass: distribute at least one enemy per spawn point if possible
+        for (let i = 0; i < shuffledPoints.length && enemiesSpawned < maxEnemies; i++) {
             const point = shuffledPoints[i];
+            
             // Scale coordinates by 2 to match the tilemap scale
-            const x = point.x * 2;
-            const y = point.y * 2;
+            const baseX = point.x * 2;
+            const baseY = point.y * 2;
+            
+            // Add random offset to prevent enemies from stacking exactly
+            const offsetX = Phaser.Math.Between(-30, 30);
+            const offsetY = Phaser.Math.Between(-30, 30);
+            const x = baseX + offsetX;
+            const y = baseY + offsetY;
             
             // Check if the point has a type property to determine enemy type
-            let enemyType = 'basic';
+            let enemyType = null;
             if (point.properties) {
                 const typeProperty = point.properties.find(prop => prop.name === 'type');
                 if (typeProperty) {
-                    enemyType = typeProperty.value;
+                    // Only allow valid enemy types
+                    const type = typeProperty.value;
+                    if (['basic', 'ranged', 'melee'].includes(type)) {
+                        enemyType = type;
+                    }
                 }
             }
             
-            // Spawn the enemy
+            // If no valid type specified in the map, determine based on distribution
+            if (!enemyType) {
+                // Determine enemy type based on distribution
+                const totalWeight = Object.values(diffParams.enemyTypeDistribution).reduce((a, b) => a + b, 0);
+                let random = Math.random() * totalWeight;
+                enemyType = 'basic';
+                
+                for (const [type, weight] of Object.entries(diffParams.enemyTypeDistribution)) {
+                    if (random < weight) {
+                        enemyType = type === 'default' ? 'basic' : type;
+                        break;
+                    }
+                    random -= weight;
+                }
+            }
+            
+            console.log(`Map1Scene: Spawning enemy #${enemiesSpawned+1} at point (${baseX}, ${baseY}) with offset (${offsetX}, ${offsetY}), type: ${enemyType}`);
             this.spawnEnemy(enemyType, x, y);
+            enemiesSpawned++;
+        }
+        
+        // Second pass: distribute remaining enemies among random spawn points
+        // This will result in multiple enemies at some spawn points
+        while (enemiesSpawned < maxEnemies) {
+            // Pick a random spawn point
+            const pointIndex = Math.floor(Math.random() * shuffledPoints.length);
+            const point = shuffledPoints[pointIndex];
+            
+            // Scale coordinates by 2 to match the tilemap scale
+            const baseX = point.x * 2;
+            const baseY = point.y * 2;
+            
+            // Add random offset to prevent enemies from stacking exactly
+            // Use larger offsets for additional enemies at the same point
+            const offsetX = Phaser.Math.Between(-50, 50);
+            const offsetY = Phaser.Math.Between(-50, 50);
+            const x = baseX + offsetX;
+            const y = baseY + offsetY;
+            
+            // Determine enemy type based on distribution
+            const totalWeight = Object.values(diffParams.enemyTypeDistribution).reduce((a, b) => a + b, 0);
+            let random = Math.random() * totalWeight;
+            let selectedType = 'basic';
+            
+            for (const [type, weight] of Object.entries(diffParams.enemyTypeDistribution)) {
+                if (random < weight) {
+                    selectedType = type === 'default' ? 'basic' : type;
+                    break;
+                }
+                random -= weight;
+            }
+            
+            console.log(`Map1Scene: Spawning additional enemy #${enemiesSpawned+1} at point (${baseX}, ${baseY}) with offset (${offsetX}, ${offsetY}), type: ${selectedType}`);
+            this.spawnEnemy(selectedType, x, y);
+            enemiesSpawned++;
         }
     }
     

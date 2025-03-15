@@ -10,7 +10,7 @@ class Gun extends Phaser.GameObjects.Container {
         // Initialize gun properties
         this.shotsPerSecond = 10;
         this.fireDelay = 1000 / this.shotsPerSecond; // Time in ms between shots
-        this.damage = 15;
+        this.damage = 15;  // Adjusted to kill basic/ranged enemies in 3 shots, melee in 4 shots
         this.maxAmmo = 30;
         this.currentAmmo = this.maxAmmo;
         this.reloadTime = 800;

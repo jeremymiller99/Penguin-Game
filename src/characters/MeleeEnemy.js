@@ -3,15 +3,16 @@ class MeleeEnemy extends Enemy {
         // Configure melee enemy to be faster but weaker
         super(scene, x, y, {
             texture: 'enemy',
-            health: 30,         // Reduced health (was 50)
-            damage: 25,         // Increased damage (was 10)
+            health: 60,         // Adjusted to be killed in 4 shots (15 damage per shot)
+            damage: 19,         // 1.1x basic enemy damage (17 * 1.1 ≈ 19)
             speed: 180,         // Increased speed (was 100)
             attackRange: 50,    // Slightly reduced attack range
-            attackCooldown: 800 // Faster attacks
+            attackCooldown: 800, // Faster attacks
+            type: 'Melee'       // Add type for nametag
         });
         
-        // Make it smaller
-        this.setScale(1.2);
+        // Increase the size
+        this.setScale(1.8);
         
         // Add a unique tint to distinguish it
         this.setTint(0xff9999);
@@ -35,6 +36,7 @@ class MeleeEnemy extends Enemy {
     }
 
     update(player, time) {
+        // Call the parent update method, which now includes pathfinding
         super.update(player, time);
         
         // Store current position for trail effect
@@ -79,21 +81,17 @@ class MeleeEnemy extends Enemy {
     }
 
     attack(player, time) {
-        if (time - this.lastAttackTime > this.attackCooldown) {
+        if (time - this.lastAttackTime > this.attackCooldown && !this.isAttacking) {
+            // Set attack flags
+            this.isAttacking = true;
+            this.hasDamageBeenApplied = false;
+            
             // Deal damage to player
-            player.health -= this.damage;
+            if (!this.hasDamageBeenApplied) {
+                player.takeDamage(this.damage);
+                this.hasDamageBeenApplied = true;
+            }
             
-            // Play attack sound with higher pitch for faster enemy
-            this.scene.sound.play('hit', {
-                volume: 0.5,
-                rate: 1.2 + Math.random() * 0.3
-            });
-            
-            // Apply visual feedback
-            player.setTint(0xff0000);
-            this.scene.time.delayedCall(100, () => {
-                player.clearTint();
-            });
             this.lastAttackTime = time;
             
             // Add a quick dash attack animation
@@ -111,6 +109,10 @@ class MeleeEnemy extends Enemy {
                 onComplete: () => {
                     this.clearTint();
                     this.setTint(0xff9999); // Restore original tint
+                    
+                    // Reset attack flags
+                    this.isAttacking = false;
+                    this.hasDamageBeenApplied = false;
                 }
             });
         }

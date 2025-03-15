@@ -13,8 +13,8 @@ class Crate extends Phaser.Physics.Arcade.Sprite {
         this.body.setMass(1);
         
         // Add health property
-        this.health = 100;
-        this.maxHealth = 100;
+        this.health = 15;  // Adjusted to be destroyed in one shot (15 damage)
+        this.maxHealth = 15;
     }
     
     // Add takeDamage method

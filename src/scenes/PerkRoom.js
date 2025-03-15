@@ -120,17 +120,17 @@ class PerkRoom extends Phaser.Scene {
     // Helper function to get the frame number for a perk icon
     perkIconFrame(iconName) {
         const frameMap = {
-            'default_perk_icon': 0,
-            'perk_rapid_fire': 1,
-            'perk_heavy_bullets': 2,
-            'perk_explosive_rounds': 3,
-            'perk_quick_slide': 4,
-            'perk_speed_boost': 5,
-            'perk_vitality': 6,
-            'perk_vampirism': 7,
-            'perk_double_cash': 8,
-            'perk_barrel_master': 9,
-            'perk_enemy_weakener': 10
+            'default_perk_icon': 22,
+            'perk_rapid_fire': 23,
+            'perk_heavy_bullets': 24,
+            'perk_explosive_rounds': 25,
+            'perk_quick_slide': 26,
+            'perk_speed_boost': 27,
+            'perk_vitality': 28,
+            'perk_vampirism': 29,
+            'perk_double_cash': 30,
+            'perk_barrel_master': 31,
+            'perk_enemy_weakener': 32
         };
         
         return frameMap[iconName] || 0; // Default to frame 0 if not found

@@ -35,7 +35,7 @@ class Cutscene extends Phaser.Scene {
                 totalScroll: 0
             },
             {
-                sprite: this.add.tileSprite(0, 125, 
+                sprite: this.add.tileSprite(0, 222, 
                     this.game.config.width, 
                     this.game.config.height, 
                     'cs_water'

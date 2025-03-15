@@ -20,13 +20,10 @@ class BaseMapScene extends Phaser.Scene {
     }
 
     create() {
-        // Create ocean background first (before any other elements)
-        this.createOceanBackground();
-        
         // Initialize groups for game objects
         this.initializeGroups();
         
-        // Create the tilemap
+        // Create the map
         this.createMap();
         
         // Create the player character
@@ -38,10 +35,13 @@ class BaseMapScene extends Phaser.Scene {
         // Set up input handlers
         this.setupInput();
         
-        // Set up physics and collisions
+        // Set up physics
         this.setupPhysics();
         
-        // Spawn entities (enemies, crates, etc.)
+        // Initialize pathfinding system
+        this.pathfinding = new Pathfinding(this);
+        
+        // Spawn entities based on difficulty
         this.spawnEntities();
         
         // Create UI elements
@@ -51,9 +51,13 @@ class BaseMapScene extends Phaser.Scene {
         this.initializePerkSystem();
         
         // Create minimap
-        const worldWidth = this.map.widthInPixels * 2;
-        const worldHeight = this.map.heightInPixels * 2;
-        this.createMinimap(worldWidth, worldHeight);
+        this.createMinimap(this.physics.world.bounds.width, this.physics.world.bounds.height);
+        
+        // Create ocean background
+        this.createOceanBackground();
+        
+        // Create whitecaps
+        this.createWhitecaps();
     }
 
     initializeGroups() {
@@ -92,8 +96,8 @@ class BaseMapScene extends Phaser.Scene {
     createPlayer() {
         // Common player creation logic
         this.penguin = this.add.sprite(this.game.config.width / 2, this.game.config.height / 2, 'penguin').setScale(2);
-        this.penguin.health = 100;
-        this.penguin.maxHealth = 100;
+        this.penguin.health = 102;  // Adjusted to survive 6 hits from basic enemies (17 damage per hit)
+        this.penguin.maxHealth = 102;
         
         // Enable physics
         this.physics.add.existing(this.penguin, false);
@@ -103,6 +107,40 @@ class BaseMapScene extends Phaser.Scene {
         this.penguin.body.setDrag(600, 600); // Default drag when not sliding
         this.penguin.body.setMaxVelocity(this.moveSpeed * 4, this.moveSpeed * 4); // Allow higher velocity during slides
         this.penguin.body.setDamping(true); // Enable damping for smoother deceleration
+        
+        // Add takeDamage method to properly handle damage
+        this.penguin.takeDamage = (amount) => {
+            // Only process damage if the player is alive
+            if (this.penguin.health <= 0) return;
+            
+            // Apply damage
+            this.penguin.health -= amount;
+            
+            // Show damage number
+            this.createDamageNumber(this.penguin.x, this.penguin.y, amount);
+            
+            // Ensure health doesn't go below 0
+            if (this.penguin.health < 0) {
+                this.penguin.health = 0;
+            }
+            
+            // Visual feedback
+            this.penguin.setTint(0xff0000);
+            this.time.delayedCall(100, () => {
+                this.penguin.clearTint();
+            });
+            
+            // Play hit sound
+            this.sound.play('hit', {
+                volume: 0.4,
+                rate: 0.8 + Math.random() * 0.4
+            });
+            
+            // Check for death immediately
+            if (this.penguin.health <= 0 && this.penguin.stateMachine) {
+                this.penguin.stateMachine.transition('dead');
+            }
+        };
         
         // Create weapon
         this.createPlayerWeapon();
@@ -181,13 +219,15 @@ class BaseMapScene extends Phaser.Scene {
             if (!this.isSliding) {
                 // Apply damage to penguin on contact with enemy
                 if (penguin.health && !penguin.isInvulnerable) {
-                    penguin.health -= 10; // Base contact damage
+                    // Check enemy type and apply appropriate damage
+                    let damageAmount = 10; // Default damage
                     
-                    // Visual feedback
-                    penguin.setTint(0xff0000);
-                    this.time.delayedCall(100, () => {
-                        penguin.clearTint();
-                    });
+                    // Check enemy type and apply appropriate damage
+                    if (enemy.attackDamage) {
+                        damageAmount = enemy.attackDamage;
+                    }
+                    
+                    penguin.takeDamage(damageAmount);
                 }
             }
         });
@@ -319,9 +359,28 @@ class BaseMapScene extends Phaser.Scene {
         // Calculate difficulty parameters
         const diffParams = this.calculateDifficultyParams(this.floorLevel);
         
-        // Spawn enemies based on difficulty
+        // Set enemy health multiplier for the scene
+        this.enemyHealthMultiplier = 1 + ((this.floorLevel - 1) * 0.2);
+        
+        console.log(`Spawning ${diffParams.enemyCount} enemies for floor level ${this.floorLevel}`);
+        
+        // Spawn enemies based on difficulty and type distribution
         for (let i = 0; i < diffParams.enemyCount; i++) {
-            this.spawnEnemy();
+            // Determine enemy type based on distribution
+            const totalWeight = Object.values(diffParams.enemyTypeDistribution).reduce((a, b) => a + b, 0);
+            let random = Math.random() * totalWeight;
+            let selectedType = 'basic';
+            
+            for (const [type, weight] of Object.entries(diffParams.enemyTypeDistribution)) {
+                if (random < weight) {
+                    selectedType = type === 'default' ? 'basic' : type;
+                    break;
+                }
+                random -= weight;
+            }
+            
+            console.log(`Spawning enemy #${i+1} of type: ${selectedType}`);
+            this.spawnEnemy(selectedType);
         }
         
         // Spawn crates
@@ -329,20 +388,66 @@ class BaseMapScene extends Phaser.Scene {
             this.spawnCrate();
         }
         
-        // Spawn exit ladder
-        this.spawnLadder();
+        // Removed ladder spawning from here - ladder will only spawn after all enemies are dead
+        // The ladder spawning is handled in the Enemy.js die() method
     }
 
     calculateDifficultyParams(floorLevel) {
-        // Base difficulty parameters
-        const params = {
-            enemyCount: Math.min(3 + Math.floor(floorLevel / 2), 15),
-            crateCount: Math.min(5 + Math.floor(floorLevel / 3), 20),
-            enemyHealth: 100 + (floorLevel * 10),
-            enemyDamage: 10 + (floorLevel * 2),
-            cashMultiplier: 1 + (floorLevel * 0.1)
+        // Base values adjustments for more gradual scaling
+        const baseEnemies = 1;
+        const baseCrates = 1;
+        
+        // More gradual enemy scaling with diminishing returns at higher levels
+        const enemyCount = Math.min(
+            Math.floor(baseEnemies + Math.sqrt(floorLevel) * 1.2), 
+            50
+        );
+        
+        // More gradual crate scaling
+        const crateCount = Math.min(
+            Math.floor(baseCrates + Math.log(floorLevel + 1) * 1.2), 
+            5
+        );
+        
+        // Calculate enemy type distribution with smoother transitions
+        let enemyTypeDistribution = {
+            default: 10,
+            melee: 0,
+            ranged: 0
         };
         
+        // More gradual introduction of melee enemies
+        if (floorLevel >= 3) {
+            enemyTypeDistribution.melee = Math.min(floorLevel - 2, 8);
+        }
+        
+        // More gradual introduction of ranged enemies
+        if (floorLevel >= 6) {
+            enemyTypeDistribution.ranged = Math.min((floorLevel - 5) * 0.8, 8);
+        }
+        
+        // As floor level increases, gradually reduce basic enemies in favor of advanced types
+        if (floorLevel >= 8) {
+            enemyTypeDistribution.default = Math.max(10 - (floorLevel - 7), 1);
+        }
+        
+        // Additional parameters for enemy scaling
+        const params = {
+            enemyCount,
+            crateCount,
+            enemyTypeDistribution,
+            
+            // Enemy health scales with floor level
+            enemyHealth: 100 + (floorLevel * 15),
+            
+            // Cash rewards increase with floor level
+            cashMultiplier: 1 + (floorLevel * 0.15),
+            
+            // Enemy speed increases slightly with floor level
+            enemySpeedMultiplier: 1 + (floorLevel * 0.05)
+        };
+        
+        console.log(`Difficulty params for floor ${floorLevel}:`, params);
         return params;
     }
 
@@ -364,12 +469,33 @@ class BaseMapScene extends Phaser.Scene {
             y = spawnY;
         }
         
-        // Create enemy based on type
+        // Ensure the enemy is within bounds (but don't add additional random offsets)
+        x = Phaser.Math.Clamp(x, 100, this.physics.world.bounds.width - 100);
+        y = Phaser.Math.Clamp(y, 100, this.physics.world.bounds.height - 100);
+        
+        // Create enemy based on type (only basic, ranged, and melee types)
         let enemy;
+        
+        // Create the appropriate enemy type
         if (type === 'ranged') {
             enemy = new RangedEnemy(this, x, y);
+        } else if (type === 'melee') {
+            enemy = new MeleeEnemy(this, x, y);
         } else {
-            enemy = new Enemy(this, x, y);
+            // Default to basic enemy
+            enemy = new Enemy(this, x, y, { type: 'Basic' });
+        }
+        
+        // Apply difficulty scaling ONLY to enemy health, not damage
+        if (this.floorLevel > 1) {
+            const healthMultiplier = 1 + ((this.floorLevel - 1) * 0.2);
+            
+            // Scale health with floor level
+            enemy.maxHealth = Math.ceil(enemy.maxHealth * healthMultiplier);
+            enemy.health = enemy.maxHealth;
+            
+            // No damage scaling - damage remains constant regardless of floor level
+            // This ensures consistent gameplay difficulty
         }
         
         // Add to enemies group
@@ -415,10 +541,45 @@ class BaseMapScene extends Phaser.Scene {
     }
 
     spawnLadder() {
-        // Spawn exit ladder at a random position
-        const x = Phaser.Math.Between(100, this.physics.world.bounds.width - 100);
-        const y = Phaser.Math.Between(100, this.physics.world.bounds.height - 100);
+        // Find a valid position on a walkable tile (tile index 9)
+        let x, y;
+        let validPosition = false;
+        let attempts = 0;
+        const maxAttempts = 50; // Limit attempts to prevent infinite loops
         
+        while (!validPosition && attempts < maxAttempts) {
+            // Generate random position
+            x = Phaser.Math.Between(100, this.physics.world.bounds.width - 100);
+            y = Phaser.Math.Between(100, this.physics.world.bounds.height - 100);
+            
+            // Check if this position is on a walkable tile (index 9)
+            if (this.backgroundLayer) {
+                // Convert world coordinates to tile coordinates
+                const tileX = Math.floor(x / (this.backgroundLayer.scaleX * this.map.tileWidth));
+                const tileY = Math.floor(y / (this.backgroundLayer.scaleY * this.map.tileHeight));
+                
+                // Get the tile at this position
+                const tile = this.backgroundLayer.getTileAt(tileX, tileY);
+                
+                // Check if it's a walkable tile (index 9)
+                if (tile && tile.index === 9) {
+                    validPosition = true;
+                    console.log(`Ladder spawned on walkable tile at (${x}, ${y}), tile coordinates (${tileX}, ${tileY})`);
+                }
+            } else {
+                // If there's no background layer, just use the random position
+                validPosition = true;
+                console.log(`No background layer found, ladder spawned at random position (${x}, ${y})`);
+            }
+            
+            attempts++;
+        }
+        
+        if (!validPosition) {
+            console.warn(`Could not find a walkable tile for ladder after ${maxAttempts} attempts. Using last attempted position.`);
+        }
+        
+        // Spawn the ladder at the determined position
         this.ladder = this.physics.add.sprite(x, y, 'ladder').setScale(2);
         
         // Add overlap with player
@@ -428,8 +589,6 @@ class BaseMapScene extends Phaser.Scene {
     handleCrateExplosion(crate) {
         if (!crate.active || !crate.scene) return; // Skip if crate is already destroyed
 
-        console.log('Handling crate explosion for:', crate);
-
         // Get explosion position
         const explosionX = crate.x;
         const explosionY = crate.y;
@@ -437,18 +596,16 @@ class BaseMapScene extends Phaser.Scene {
 
         // Check if penguin is within blast radius
         const distToPenguin = Phaser.Math.Distance.Between(explosionX, explosionY, this.penguin.x, this.penguin.y);
-        if (distToPenguin < explosionRadius && !this.penguin.isExplosionImmune && !this.isSliding) {
+        if (distToPenguin < explosionRadius && !this.penguin.isExplosionImmune) {
             // Deal damage to penguin based on distance
             const damage = Math.floor(50 * (1 - distToPenguin/explosionRadius));
-            if (this.penguin.health) {
+            if (this.penguin.takeDamage) {
+                this.penguin.takeDamage(damage);
+            } else if (this.penguin.health) {
                 this.penguin.health -= damage;
+                // Show damage number
+                this.createDamageNumber(this.penguin.x, this.penguin.y, damage);
             }
-            
-            // Visual feedback for damage
-            this.penguin.setTint(0xff0000);
-            this.time.delayedCall(100, () => {
-                this.penguin.clearTint();
-            });
         }
 
         // Check if any enemies are within blast radius
@@ -456,7 +613,9 @@ class BaseMapScene extends Phaser.Scene {
             const distToEnemy = Phaser.Math.Distance.Between(explosionX, explosionY, enemy.x, enemy.y);
             if (distToEnemy < explosionRadius) {
                 const damage = Math.floor(100 * (1 - distToEnemy/explosionRadius));
-                enemy.takeDamage(damage);
+                if (enemy.takeDamage) {
+                    enemy.takeDamage(damage);
+                }
             }
         });
 
@@ -472,7 +631,7 @@ class BaseMapScene extends Phaser.Scene {
                 }
             }
         });
-        
+
         // Check for barrels in explosion radius
         this.barrels.getChildren().forEach(barrel => {
             if (barrel !== crate && barrel.active) {
@@ -598,7 +757,7 @@ class BaseMapScene extends Phaser.Scene {
         const playerDistance = Phaser.Math.Distance.Between(x, y, this.penguin.x, this.penguin.y);
         if (playerDistance <= damageRadius && !this.isSliding && !this.penguin.isExplosionImmune) {
             const damage = Math.floor(damageAmount * 0.5 * (1 - playerDistance / damageRadius));
-            this.penguin.health -= damage;
+            this.penguin.takeDamage(damage);
         }
     }
 
@@ -725,7 +884,8 @@ class BaseMapScene extends Phaser.Scene {
         
         // Apply damage to enemy
         if (enemy.takeDamage) {
-            enemy.takeDamage(bullet.damage || 20);
+            const damage = bullet.damage || 15;
+            enemy.takeDamage(damage);
             
             // Check if enemy is dead
             if (enemy.health <= 0) {
@@ -1282,14 +1442,14 @@ class BaseMapScene extends Phaser.Scene {
     updateHealthBar() {
         if (!this.healthBarFill || !this.penguin) return;
         
-        // Calculate health percentage
-        const healthPercent = this.penguin.health / this.penguin.maxHealth;
+        // Calculate health percentage (ensure it's not negative)
+        const healthPercent = Math.max(0, this.penguin.health) / this.penguin.maxHealth;
         
         // Update health bar width
         this.healthBarFill.width = 196 * healthPercent;
         
         // Update health text
-        this.healthText.setText(`${Math.ceil(this.penguin.health)}/${this.penguin.maxHealth}`);
+        this.healthText.setText(`${Math.max(0, Math.ceil(this.penguin.health))}/${this.penguin.maxHealth}`);
     }
 
     updateAmmoDisplay() {
@@ -1311,6 +1471,15 @@ class BaseMapScene extends Phaser.Scene {
             this.isSliding = this.penguin.stateMachine.currentState === this.penguin.stateMachine.states.sliding;
         }
         
+        // Update all enemies
+        if (this.enemies && this.penguin) {
+            this.enemies.getChildren().forEach(enemy => {
+                if (enemy.active && enemy.update) {
+                    enemy.update(this.penguin, this.time.now);
+                }
+            });
+        }
+        
         // Update UI elements
         this.updateHealthBar();
         this.updateAmmoDisplay();
@@ -1319,6 +1488,11 @@ class BaseMapScene extends Phaser.Scene {
         // Update minimap if it exists
         if (this.minimap) {
             this.updateMinimap();
+        }
+        
+        // Check for player death
+        if (this.penguin && this.penguin.health <= 0) {
+            this.checkPlayerDeath();
         }
         
         // Update perk system
@@ -1538,13 +1712,22 @@ class BaseMapScene extends Phaser.Scene {
         if (!this.penguin) return;
         
         if (this.penguin.health <= 0 && !this.isGameFrozen) {
-            this.createDeathEffect();
-            this.isGameFrozen = true;
-            this.physics.pause();
+            // Ensure health is exactly 0 for visual consistency
+            this.penguin.health = 0;
             
-            // Show death screen after a short delay to let particles play
-            this.time.delayedCall(800, () => {
-                this.showDeathScreen();
+            // Update health bar one last time to show 0 health
+            this.updateHealthBar();
+            
+            // Add a small delay before freezing the game to allow health bar to update
+            this.time.delayedCall(100, () => {
+                this.createDeathEffect();
+                this.isGameFrozen = true;
+                this.physics.pause();
+                
+                // Show death screen after a short delay to let particles play
+                this.time.delayedCall(800, () => {
+                    this.showDeathScreen();
+                });
             });
         }
     }
@@ -1948,6 +2131,67 @@ class BaseMapScene extends Phaser.Scene {
             onComplete: () => {
                 sparkle.destroy();
             }
+        });
+    }
+
+    // Add a utility function to create damage number popups
+    createDamageNumber(x, y, amount, isHealing = false) {
+        // Choose color based on whether it's damage or healing
+        const color = isHealing ? '#00ff00' : '#ff0000';
+        const prefix = isHealing ? '+' : '-';
+        
+        // Create text object
+        const damageText = this.add.text(x, y - 20, prefix + amount, {
+            fontFamily: 'Arial',
+            fontSize: '20px',
+            fontStyle: 'bold',
+            color: color,
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+        
+        // Set depth to ensure it's visible above other elements
+        damageText.setDepth(1000);
+        
+        // Animate the text
+        this.tweens.add({
+            targets: damageText,
+            y: damageText.y - 50, // Float upward
+            alpha: 0,
+            scale: 1.5,
+            duration: 1000,
+            ease: 'Power2',
+            onComplete: () => {
+                damageText.destroy();
+            }
+        });
+    }
+
+    // Add a method to heal the player and show healing numbers
+    healPlayer(amount) {
+        if (!this.penguin || this.penguin.health <= 0) return;
+        
+        // Calculate actual healing (don't exceed max health)
+        const actualHealing = Math.min(amount, this.penguin.maxHealth - this.penguin.health);
+        
+        if (actualHealing <= 0) return;
+        
+        // Apply healing
+        this.penguin.health += actualHealing;
+        
+        // Show healing number
+        this.createDamageNumber(this.penguin.x, this.penguin.y, actualHealing, true);
+        
+        // Visual feedback
+        this.penguin.setTint(0x00ff00);
+        this.time.delayedCall(100, () => {
+            this.penguin.clearTint();
+        });
+        
+        // Play healing sound
+        this.sound.play('hit', {
+            volume: 0.4,
+            rate: 1.2 + Math.random() * 0.4
         });
     }
 } 

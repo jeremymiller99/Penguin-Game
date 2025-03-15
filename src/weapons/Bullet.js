@@ -33,12 +33,9 @@ class Bullet extends Phaser.Physics.Arcade.Sprite {
 
     handleCollision(target) {
         if (this.source === 'enemy' && target === this.scene.penguin) {
-            target.health -= 10; // Example damage value
-            this.scene.sound.play('hit', { volume: 0.4 });
-            target.setTint(0xff0000);
-            this.scene.time.delayedCall(100, () => target.clearTint());
+            target.takeDamage(this.damage || 21); // Use the enemy's damage value (default to ranged enemy damage)
         } else if (this.source === 'player' && target instanceof Enemy) {
-            target.takeDamage(10);
+            target.takeDamage(this.damage || 15); // Use the player's gun damage value
         }
         this.destroy();
     }

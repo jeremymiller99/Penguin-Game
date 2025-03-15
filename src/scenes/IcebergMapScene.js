@@ -151,27 +151,54 @@ class IcebergMapScene extends BaseMapScene {
         // fall back to the base implementation to spawn remaining entities
         if (!usedMapSpawnPoints) {
         super.spawnEntities();
-        } else {
-            // Just spawn the ladder if we used map spawn points
-            this.spawnLadder();
         }
     }
     
     spawnEntitiesFromMapLayers() {
         let entitiesSpawned = false;
         
-        // Spawn entities from SpawnPoints layer
-        const spawnLayer = this.map.getObjectLayer('SpawnPoints');
-        if (spawnLayer && spawnLayer.objects && spawnLayer.objects.length > 0) {
-            this.spawnEntitiesFromSpawnLayer(spawnLayer.objects);
-            entitiesSpawned = true;
-        }
-        
-        // Spawn enemies from EnemySpawnPoints layer (if it exists)
+        // Check if we have dedicated enemy spawn points first
         const enemySpawnLayer = this.map.getObjectLayer('EnemySpawnPoints');
         if (enemySpawnLayer && enemySpawnLayer.objects && enemySpawnLayer.objects.length > 0) {
+            // Use dedicated enemy spawn points if available
             this.spawnEnemiesFromLayer(enemySpawnLayer.objects);
             entitiesSpawned = true;
+        } else {
+            // Fall back to generic SpawnPoints layer for enemies if no dedicated enemy spawn points
+        const spawnLayer = this.map.getObjectLayer('SpawnPoints');
+            if (spawnLayer && spawnLayer.objects && spawnLayer.objects.length > 0) {
+                // Filter out only enemy-type spawn points
+                const enemySpawnPoints = spawnLayer.objects.filter(point => {
+                    if (!point.properties) return true; // Default to enemy if no properties
+                    
+                    const typeProperty = point.properties.find(prop => prop.name === 'type');
+                    if (!typeProperty) return true; // Default to enemy if no type property
+                    
+                    const type = typeProperty.value.toLowerCase();
+                    return type === 'enemy' || type === 'basic' || type === 'ranged' || type === 'melee';
+                });
+                
+                if (enemySpawnPoints.length > 0) {
+                    this.spawnEnemiesFromLayer(enemySpawnPoints);
+                    entitiesSpawned = true;
+                }
+                
+                // Process non-enemy spawn points separately
+                const otherSpawnPoints = spawnLayer.objects.filter(point => {
+                    if (!point.properties) return false;
+                    
+                    const typeProperty = point.properties.find(prop => prop.name === 'type');
+                    if (!typeProperty) return false;
+                    
+                    const type = typeProperty.value.toLowerCase();
+                    return type !== 'enemy' && type !== 'basic' && type !== 'ranged' && type !== 'melee';
+                });
+                
+                if (otherSpawnPoints.length > 0) {
+                    this.spawnNonEnemyEntities(otherSpawnPoints);
+                    entitiesSpawned = true;
+                }
+            }
         }
         
         // Spawn crates from CrateSpawnPoints layer (if it exists)
@@ -191,33 +218,26 @@ class IcebergMapScene extends BaseMapScene {
         return entitiesSpawned;
     }
     
-    spawnEntitiesFromSpawnLayer(spawnPoints) {
+    // New method to handle non-enemy entities from SpawnPoints layer
+    spawnNonEnemyEntities(spawnPoints) {
         // Process each spawn point based on its type property
         spawnPoints.forEach(point => {
             // Scale coordinates by 2 to match the tilemap scale
             const x = point.x * 2;
             const y = point.y * 2;
             
-            // Default type is 'enemy' if not specified
-            let entityType = 'enemy';
+            // Get entity type from properties
+            let entityType = 'crate'; // Default to crate for non-enemy points
             
-            // Check if the point has a type property
             if (point.properties) {
                 const typeProperty = point.properties.find(prop => prop.name === 'type');
                 if (typeProperty) {
-                    entityType = typeProperty.value;
+                    entityType = typeProperty.value.toLowerCase();
                 }
             }
             
             // Spawn the appropriate entity based on type
-            switch (entityType.toLowerCase()) {
-                case 'enemy':
-                case 'basic':
-                    this.spawnEnemy('basic', x, y);
-                    break;
-                case 'ranged':
-                    this.spawnEnemy('ranged', x, y);
-                    break;
+            switch (entityType) {
                 case 'crate':
                     this.spawnCrate(x, y);
                     break;
@@ -233,32 +253,111 @@ class IcebergMapScene extends BaseMapScene {
     spawnEnemiesFromLayer(spawnPoints) {
         // Calculate how many enemies to spawn based on difficulty
         const diffParams = this.calculateDifficultyParams(this.floorLevel);
-        const maxEnemies = diffParams.enemyCount;
+        const totalEnemies = diffParams.enemyCount;
         
-        // Limit the number of spawn points to use
-        const pointsToUse = Math.min(spawnPoints.length, maxEnemies);
+        console.log(`IcebergMapScene: Spawning ${totalEnemies} enemies for floor level ${this.floorLevel}`);
+        
+        // If we have no spawn points, use the default spawning method
+        if (!spawnPoints || spawnPoints.length === 0) {
+            // Use the parent spawnEntities method which now uses the type distribution
+            super.spawnEntities();
+            return;
+        }
+        
+        // Instead of limiting to spawn points, we'll distribute enemies among available points
+        // This allows multiple enemies to spawn at the same point with offsets
+        
+        // Calculate how many enemies per spawn point on average (can be fractional)
+        const enemiesPerPoint = totalEnemies / spawnPoints.length;
         
         // Shuffle the spawn points to randomize which ones we use
         const shuffledPoints = Phaser.Utils.Array.Shuffle([...spawnPoints]);
         
-        // Spawn enemies at the selected points
-        for (let i = 0; i < pointsToUse; i++) {
+        // Counter for spawned enemies
+        let enemiesSpawned = 0;
+        
+        // First pass: distribute at least one enemy per spawn point if possible
+        for (let i = 0; i < shuffledPoints.length && enemiesSpawned < totalEnemies; i++) {
             const point = shuffledPoints[i];
+            
             // Scale coordinates by 2 to match the tilemap scale
-            const x = point.x * 2;
-            const y = point.y * 2;
+            const baseX = point.x * 2;
+            const baseY = point.y * 2;
+            
+            // Add random offset to prevent enemies from stacking exactly
+            const offsetX = Phaser.Math.Between(-30, 30);
+            const offsetY = Phaser.Math.Between(-30, 30);
+            const x = baseX + offsetX;
+            const y = baseY + offsetY;
             
             // Check if the point has a type property to determine enemy type
-            let enemyType = 'basic';
+            let enemyType = null;
             if (point.properties) {
                 const typeProperty = point.properties.find(prop => prop.name === 'type');
                 if (typeProperty) {
-                    enemyType = typeProperty.value;
+                    // Only allow valid enemy types
+                    const type = typeProperty.value;
+                    if (['basic', 'ranged', 'melee'].includes(type)) {
+                        enemyType = type;
+                    }
                 }
             }
             
-            // Spawn the enemy
+            // If no valid type specified in the map, determine based on distribution
+            if (!enemyType) {
+                // Determine enemy type based on distribution
+                const totalWeight = Object.values(diffParams.enemyTypeDistribution).reduce((a, b) => a + b, 0);
+                let random = Math.random() * totalWeight;
+                enemyType = 'basic';
+                
+                for (const [type, weight] of Object.entries(diffParams.enemyTypeDistribution)) {
+                    if (random < weight) {
+                        enemyType = type === 'default' ? 'basic' : type;
+                        break;
+                    }
+                    random -= weight;
+                }
+            }
+            
+            console.log(`IcebergMapScene: Spawning enemy #${enemiesSpawned+1} at point (${baseX}, ${baseY}) with offset (${offsetX}, ${offsetY}), type: ${enemyType}`);
             this.spawnEnemy(enemyType, x, y);
+            enemiesSpawned++;
+        }
+        
+        // Second pass: distribute remaining enemies among random spawn points
+        // This will result in multiple enemies at some spawn points
+        while (enemiesSpawned < totalEnemies) {
+            // Pick a random spawn point
+            const pointIndex = Math.floor(Math.random() * shuffledPoints.length);
+            const point = shuffledPoints[pointIndex];
+            
+            // Scale coordinates by 2 to match the tilemap scale
+            const baseX = point.x * 2;
+            const baseY = point.y * 2;
+            
+            // Add random offset to prevent enemies from stacking exactly
+            // Use larger offsets for additional enemies at the same point
+            const offsetX = Phaser.Math.Between(-50, 50);
+            const offsetY = Phaser.Math.Between(-50, 50);
+            const x = baseX + offsetX;
+            const y = baseY + offsetY;
+            
+            // Determine enemy type based on distribution
+            const totalWeight = Object.values(diffParams.enemyTypeDistribution).reduce((a, b) => a + b, 0);
+            let random = Math.random() * totalWeight;
+            let selectedType = 'basic';
+            
+            for (const [type, weight] of Object.entries(diffParams.enemyTypeDistribution)) {
+                if (random < weight) {
+                    selectedType = type === 'default' ? 'basic' : type;
+                    break;
+                }
+                random -= weight;
+            }
+            
+            console.log(`IcebergMapScene: Spawning additional enemy #${enemiesSpawned+1} at point (${baseX}, ${baseY}) with offset (${offsetX}, ${offsetY}), type: ${selectedType}`);
+            this.spawnEnemy(selectedType, x, y);
+            enemiesSpawned++;
         }
     }
     
@@ -293,6 +392,10 @@ class IcebergMapScene extends BaseMapScene {
             const barrel = new Crate(this, x, y);
             barrel.setTexture('barrel');
             barrel.setScale(2);
+            
+            // Reduce barrel health to make it explode in one shot
+            barrel.health = 15; // Adjusted to be destroyed in one shot (15 damage)
+            barrel.maxHealth = 15;
             
             // Make sure the barrel has the correct physics properties
             barrel.body.setCollideWorldBounds(true);
@@ -335,7 +438,7 @@ class IcebergMapScene extends BaseMapScene {
                                 
                                 // Add health property if it doesn't exist
                                 if (barrel.health === undefined) {
-                                    barrel.health = 100;
+                                    barrel.health = 15; // Adjusted to be destroyed in one shot (15 damage)
                                 }
                                 
                                 // Manually reduce health
